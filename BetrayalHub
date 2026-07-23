@@ -168,19 +168,11 @@ pcall(function()
         HideSearchBar  = true,
         ScrollBarEnabled = false,
         
-        -- ============================================================
-        -- KEY SYSTEM CONFIGURATION
-        -- ============================================================
         KeySystem = {
-          
             Key = { "RELEASE" },
-           
             Note = "join the server for key its in Script",
-            
             URL = "https://discord.gg/H5GdzJA2Nb",
-            
             SaveKey = true,
-            
         },
     })
 end)
@@ -321,14 +313,8 @@ do -- tabSettings
 local tabSettings = win:Tab({ Title = "Setting", Icon = "settings" })
 
 -- QTE SECTION
--- ============================================================
 local secQTE = tabSettings:Section({ Title = "QTE", Opened = true })
 
--- Replace the QTE section in Settings tab with this version
-
-local secQTE = tabSettings:Section({ Title = "QTE", Opened = true })
-
--- Disarm QTE with adjustable parameters
 local qteConfig = {
     enabled = false,
     clickDelay = 0.08,
@@ -352,16 +338,13 @@ local function disarmQTEStart()
         local UserInputService = game:GetService("UserInputService")
         local LocalPlayer = Players.LocalPlayer
         
-        -- Platform detection
         local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
         
-        -- Auto QTE
         local autoQTEEnabled = true
         local qteModuleInstance = nil
         local qteActive = false
         local qteUI = nil
         
-        -- State tracking
         local lastClickTime = 0
         local clickCount = 0
         local successCount = 0
@@ -509,7 +492,6 @@ local function disarmQTEStart()
             end
             if #zones == 0 then return end
             for _, zone in ipairs(zones) do
-                -- Inside zone: spam click until line exits
                 if linePos >= zone.Min and linePos <= zone.Max then
                     local retries = 0
                     while retries < 5 do
@@ -522,7 +504,6 @@ local function disarmQTEStart()
                     task.wait(qteConfig.debounceTime)
                     return
                 end
-                -- Approaching zone: pre-click
                 local distToEdge = lineDirection > 0 and (zone.Min - linePos) or (linePos - zone.Max)
                 if distToEdge > 0 and distToEdge <= qteConfig.zoneMargin then
                     task.wait(qteConfig.clickDelay)
@@ -587,7 +568,6 @@ local function disarmQTEStop()
     end
 end
 
--- Main Toggle
 secQTE:Toggle({
     Title = "Enable Disarm QTE",
     Type = "Checkbox",
@@ -601,7 +581,6 @@ secQTE:Toggle({
     end
 })
 
--- Click Delay Slider
 secQTE:Slider({
     Title = "Click Delay (s)",
     Flag = "qteClickDelay",
@@ -614,7 +593,6 @@ secQTE:Slider({
     end
 })
 
--- Debounce Time Slider
 secQTE:Slider({
     Title = "Debounce Time (s)",
     Flag = "qteDebounceTime",
@@ -627,7 +605,6 @@ secQTE:Slider({
     end
 })
 
--- Zone Margin Slider
 secQTE:Slider({
     Title = "Zone Margin",
     Flag = "qteZoneMargin",
@@ -640,7 +617,6 @@ secQTE:Slider({
     end
 })
 
--- Spam Wait Time Slider
 secQTE:Slider({
     Title = "Spam Click Interval (s)",
     Flag = "qteSpamWaitTime",
@@ -653,7 +629,6 @@ secQTE:Slider({
     end
 })
 
--- Pre-Click Attempts Slider
 secQTE:Slider({
     Title = "Pre-Click Attempts",
     Flag = "qtePreClickAttempts",
@@ -666,7 +641,6 @@ secQTE:Slider({
     end
 })
 
--- Click Offset Slider (for future use)
 secQTE:Slider({
     Title = "Click Offset",
     Flag = "qteClickOffset",
@@ -678,9 +652,6 @@ secQTE:Slider({
         end)
     end
 })
-
--- END QTE SECTION
--- ============================================================
 
 local secInterface = tabSettings:Section({ Title = "Interface", Opened = true })
 
@@ -895,21 +866,17 @@ do
         hum.WalkSpeed = 0; hum.JumpPower = 0; root.Anchored = true
         local an = Instance.new("Animation"); an.AnimationId = tostring(data.AssetID)
         emState.track = anim:LoadAnimation(an); emState.track.Looped = true; emState.track:Play()
-        -- Shiftlock camera follow
         if emState.rotConn then emState.rotConn:Disconnect() end
         emState.rotConn = svc.Run.RenderStepped:Connect(function()
             if not emState.emoting then return end
-            -- Only rotate to match camera when shiftlock is on
             local cam = workspace.CurrentCamera; if not cam then return end
             if cam.CameraType ~= Enum.CameraType.Custom then return end
             local ch2 = lp.Character; if not ch2 then return end
             local r2  = ch2:FindFirstChild("HumanoidRootPart"); if not r2 then return end
-            -- CameraMode LockFirstPerson = shiftlock
             if lp.CameraMode ~= Enum.CameraMode.LockFirstPerson then return end
             local _, camY, _ = cam.CFrame:ToEulerAnglesYXZ()
             r2.CFrame = CFrame.new(r2.Position) * CFrame.Angles(0, camY, 0)
         end)
-        -- Sound on HumanoidRootPart only
         if data.SFX then
             local old2 = root:FindFirstChild("EmoteSound"); if old2 then old2:Destroy() end
             local snd = Instance.new("Sound"); snd.Name = "EmoteSound"
@@ -918,13 +885,11 @@ do
             snd.RollOffMaxDistance = 60; snd.RollOffMinDistance = 10
             snd.Parent = root; snd:Play()
         end
-        -- Particle effect
         local att = Instance.new("Attachment"); att.Name = "RootAttachment"; att.Parent = root
         local burst = Instance.new("ParticleEmitter"); burst.Name = "EmoteBurst"
         burst.Texture = "rbxassetid://635533604"; burst.Rate = 60
         burst.Speed = NumberRange.new(2,5); burst.Lifetime = NumberRange.new(0.5,1.2)
         burst.Drag = 5; burst.Parent = att
-        -- Hakari VFX
         if string.lower(mod.Name) == "hakaridance" or string.lower(mod.Name) == "hakari" then
             local beamVFX = mod:FindFirstChild("HakariBeamEffect")
             if beamVFX then
@@ -948,11 +913,9 @@ do
         emState.sg = SG2
         local function rnd2(i,r) local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,r or 8); c.Parent=i end
         local function tw2(o,t,p) svc.TS:Create(o,TweenInfo.new(t,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),p):Play() end
-        -- Toggle button (draggable)
         local Tog2=Instance.new("TextButton"); Tog2.Size=UDim2.new(0,50,0,50); Tog2.Position=UDim2.new(1,-70,1,-70)
         Tog2.Text="🎵"; Tog2.TextSize=24; Tog2.BackgroundColor3=Color3.fromRGB(30,30,40)
         Tog2.AutoButtonColor=false; Tog2.BorderSizePixel=0; Tog2.ZIndex=20; Tog2.Parent=SG2; rnd2(Tog2,25)
-        -- Drag state for the button itself
         local togDragging=false; local togDragStart; local togStartPos; local togMoved=false
         Tog2.InputBegan:Connect(function(inp)
             if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
@@ -970,12 +933,10 @@ do
                 Tog2.Position=UDim2.new(togStartPos.X.Scale,togStartPos.X.Offset+d.X,togStartPos.Y.Scale,togStartPos.Y.Offset+d.Y)
             end
         end)
-        -- Panel
         local PW,PH=220,340
         local Panel2=Instance.new("Frame"); Panel2.Size=UDim2.new(0,PW,0,PH)
         Panel2.Position=UDim2.new(0.5,-PW/2,0.5,-PH/2); Panel2.BackgroundColor3=Color3.fromRGB(16,16,22)
         Panel2.BorderSizePixel=0; Panel2.ClipsDescendants=true; Panel2.Visible=false; Panel2.ZIndex=15; Panel2.Parent=SG2; rnd2(Panel2,10)
-        -- Draggable
         local drag2,dInp2,dSt2,sSt2
         Panel2.InputBegan:Connect(function(inp)
             if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
@@ -992,7 +953,6 @@ do
                 Panel2.Position=UDim2.new(sSt2.X.Scale,sSt2.X.Offset+d.X,sSt2.Y.Scale,sSt2.Y.Offset+d.Y)
             end
         end)
-        -- Accent, header
         local Ac2=Instance.new("Frame"); Ac2.Size=UDim2.new(1,0,0,2); Ac2.BackgroundColor3=Color3.fromRGB(80,140,255); Ac2.BorderSizePixel=0; Ac2.Parent=Panel2
         local Hdr2=Instance.new("Frame"); Hdr2.Size=UDim2.new(1,0,0,34); Hdr2.Position=UDim2.new(0,0,0,2); Hdr2.BackgroundTransparency=1; Hdr2.Parent=Panel2
         local HTit2=Instance.new("TextLabel"); HTit2.Size=UDim2.new(1,-36,1,0); HTit2.Position=UDim2.new(0,10,0,0)
@@ -1003,14 +963,12 @@ do
         CX2.Text="✕"; CX2.TextSize=12; CX2.Font=Enum.Font.GothamBold
         CX2.TextColor3=Color3.fromRGB(140,140,160); CX2.BackgroundColor3=Color3.fromRGB(30,30,42)
         CX2.AutoButtonColor=false; CX2.BorderSizePixel=0; CX2.Parent=Hdr2; rnd2(CX2,6)
-        -- Search
         local Srch2=Instance.new("TextBox"); Srch2.Size=UDim2.new(1,-12,0,28); Srch2.Position=UDim2.new(0,6,0,38)
         Srch2.PlaceholderText="Search..."; Srch2.Text=""
         Srch2.TextColor3=Color3.fromRGB(210,210,225); Srch2.PlaceholderColor3=Color3.fromRGB(90,90,110)
         Srch2.TextSize=12; Srch2.Font=Enum.Font.Gotham; Srch2.BackgroundColor3=Color3.fromRGB(24,24,34)
         Srch2.BorderSizePixel=0; Srch2.ClearTextOnFocus=false; Srch2.Parent=Panel2; rnd2(Srch2,6)
         do local p=Instance.new("UIPadding"); p.PaddingLeft=UDim.new(0,8); p.PaddingRight=UDim.new(0,8); p.Parent=Srch2 end
-        -- Scroll
         local Scrl2=Instance.new("ScrollingFrame"); Scrl2.Size=UDim2.new(1,-8,1,-106); Scrl2.Position=UDim2.new(0,4,0,72)
         Scrl2.BackgroundTransparency=1; Scrl2.BorderSizePixel=0; Scrl2.CanvasSize=UDim2.new(0,0,0,0)
         Scrl2.ScrollBarThickness=3; Scrl2.ScrollBarImageColor3=Color3.fromRGB(80,140,255)
@@ -1019,7 +977,6 @@ do
         LL3:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
             Scrl2.CanvasSize=UDim2.new(0,0,0,LL3.AbsoluteContentSize.Y+6)
         end)
-        -- Stop btn
         local Dv2=Instance.new("Frame"); Dv2.Size=UDim2.new(1,0,0,1); Dv2.Position=UDim2.new(0,0,1,-37)
         Dv2.BackgroundColor3=Color3.fromRGB(36,36,50); Dv2.BorderSizePixel=0; Dv2.Parent=Panel2
         local Stp2=Instance.new("TextButton"); Stp2.Size=UDim2.new(1,0,0,36); Stp2.Position=UDim2.new(0,0,1,-36)
@@ -1029,7 +986,6 @@ do
         Stp2.MouseEnter:Connect(function() tw2(Stp2,0.1,{BackgroundColor3=Color3.fromRGB(40,16,16)}) end)
         Stp2.MouseLeave:Connect(function() tw2(Stp2,0.1,{BackgroundColor3=Color3.fromRGB(22,14,14)}) end)
         Stp2.MouseButton1Click:Connect(function() emStop() end)
-        -- Rows
         local rows2={}
         local function refreshList2(q)
             for _,r in ipairs(rows2) do pcall(function() r:Destroy() end) end; rows2={}
@@ -1063,7 +1019,6 @@ do
             end
         end
         Srch2:GetPropertyChangedSignal("Text"):Connect(function() refreshList2(Srch2.Text) end)
-        -- Open/close
         local pOpen2=false
         local function setPanel2(open)
             pOpen2=open; Tog2.Text=open and "✕" or "🎵"; Panel2.Visible=open
@@ -1309,9 +1264,9 @@ local function statusToggle(name)
     end)
 end
 
-secStatus:Button({ Title = "Toggle: Slowness",       Callback = function() statusToggle("Slowness")      end })
-secStatus:Button({ Title = "Toggle: Hallucination",  Callback = function() statusToggle("Hallucination") end })
-secStatus:Button({ Title = "Toggle: Visual Effects", Callback = function() statusToggle("Visual")        end })
+secStatus:Toggle({ Title = "Disable Slowness",       Default = false, Callback = function() statusToggle("Slowness")      end })
+secStatus:Toggle({ Title = "Disable Hallucination",  Default = false, Callback = function() statusToggle("Hallucination") end })
+secStatus:Toggle({ Title = "Disable Visual Effects", Default = false, Callback = function() statusToggle("Visual")        end })
 
 lp.CharacterAdded:Connect(function()
     pcall(function()
@@ -2914,7 +2869,7 @@ secMinion:Slider({ Title="Highlight Transparency", Flag="espMinionTrans", Step=0
 secMinion:Button({ Title="Force Rescan", Callback=function() pcall(function() clearTag("pizza"); clearTag("zombie"); clearTag("puddle"); task.wait(0.1); scanPizza(); scanZombie(); scanPuddles() end) end })
 
 -- ============================================================
--- INTEGRATED GROUNDBULB & VINE ESP
+-- GROUNDBULB & VINE ESP (Integrated Working Version - FIXED)
 -- ============================================================
 
 local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine ESP", Opened = true })
@@ -2923,20 +2878,20 @@ local gvEsp = {
     on = false,
     showGroundbulb = true,
     showVine = true,
-    maxDistance = 200,
-    transparency = 0.5,
-    scanThread = nil,
-    highlights = {},
-    billboards = {},
-    connections = {},
+    scanInterval = 0.5,
+    trackedEntities = {},
 }
 
-local GV_COLORS = {
-    Groundbulb = Color3.fromRGB(170, 0, 255),
-    Vine = Color3.fromRGB(170, 0, 255),
+local gvConfig = {
+    HighlightColor = Color3.fromRGB(170, 0, 255),
+    FillTransparency = 0.5,
+    OutlineTransparency = 0.1,
 }
 
+-- Function to find the highest part or flower part of the model for top positioning
 local function gvGetTopPart(model)
+    if not model then return nil end
+    
     local highestPart = model.PrimaryPart
     local highestY = highestPart and highestPart.Position.Y or -math.huge
 
@@ -2952,13 +2907,89 @@ local function gvGetTopPart(model)
     return highestPart
 end
 
-local function gvClassifyEntity(child)
-    if not child:IsA("Model") then return nil end
+-- Function to highlight a specific target model (Vine or GroundBulb)
+local function gvHighlightEntity(model, displayName)
+    if not model or not model:IsA("Model") then return end
+    if gvEsp.trackedEntities[model] then return end -- Already tracked
+
+    -- Find the highest part (the flower/top) to attach the billboard to
+    local adornPart = gvGetTopPart(model)
+    if not adornPart then
+        for _, descendant in ipairs(model:GetDescendants()) do
+            if descendant:IsA("BasePart") and descendant.Name ~= "Handle" then
+                adornPart = descendant
+                break
+            end
+        end
+    end
+
+    if not adornPart then
+        warn("[GV-ESP] No part found for:", model.Name)
+        return
+    end
+
+    if not model.PrimaryPart then
+        model.PrimaryPart = adornPart
+    end
+
+    -- Create the Highlight instance
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "GV_EntityHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = gvConfig.HighlightColor
+    highlight.FillTransparency = gvConfig.FillTransparency
+    highlight.OutlineColor = gvConfig.HighlightColor
+    highlight.OutlineTransparency = gvConfig.OutlineTransparency
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Enabled = true
+    highlight.Parent = model
+
+    -- Create a BillboardGui to display the text above the top of the entity
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "GV_EntityTag"
+    billboard.Size = UDim2.new(0, 200, 0, 30)
+    billboard.Adornee = adornPart
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.MaxDistance = 150
+    billboard.AlwaysOnTop = true
+    billboard.Parent = model
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = displayName
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextStrokeTransparency = 0.3
+    label.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    label.TextSize = 16
+    label.Parent = billboard
+
+    -- Store the entity and its associated objects for cleanup
+    gvEsp.trackedEntities[model] = {
+        Model = model,
+        Highlight = highlight,
+        Billboard = billboard,
+    }
+end
+
+-- Function to check and classify a model as Vine or GroundBulb (WITH FIX)
+local function gvEvaluateAndHighlight(child)
+    if not child:IsA("Model") then return end
+    
+    -- === FIX: EXPLICITLY IGNORE MAP AND PLAYER FOLDERS ===
+    if child.Name == "Map" then return end
+    if child.Name == "Players" then return end
+    
+    -- === FIX: IGNORE MODELS THAT ARE ACTUAL PLAYERS (HAS HUMANOID) ===
+    if child:FindFirstChildOfClass("Humanoid") then return end
 
     local nameLower = child.Name:lower()
     local isGroundBulb = nameLower:find("groundbulb")
     local isVine = nameLower:find("vine")
 
+    -- Deep checks if name doesn't match directly
     if not isGroundBulb and not isVine then
         for _, descendant in ipairs(child:GetDescendants()) do
             if descendant:IsA("BasePart") then
@@ -2974,165 +3005,116 @@ local function gvClassifyEntity(child)
         end
     end
 
-    if isGroundBulb then return "Groundbulb"
-    elseif isVine then return "Vine"
-    else return nil end
+    if isGroundBulb and gvEsp.showGroundbulb and not gvEsp.trackedEntities[child] then
+        gvHighlightEntity(child, "GroundBulb")
+    elseif isVine and gvEsp.showVine and not gvEsp.trackedEntities[child] then
+        gvHighlightEntity(child, "Vine")
+    end
 end
 
-local function gvCreate(obj, entityType)
-    pcall(function()
-        if not obj or not obj.Parent or gvEsp.highlights[obj] then return end
+-- Function to scan the workspace for new Vines and GroundBulbs
+local function gvScanForSpawns()
+    if not gvEsp.on then return end
+    
+    local map = svc.WS:FindFirstChild("Map")
+    if not map then return end
 
-        local color = GV_COLORS[entityType]
-        if not color then return end
+    local ingame = map:FindFirstChild("Ingame")
+    if not ingame then return end
 
-        local hl = Instance.new("Highlight")
-        hl.Name = "V1PR_GVHighlight"
-        hl.FillColor = color
-        hl.FillTransparency = gvEsp.transparency
-        hl.OutlineColor = color
-        hl.OutlineTransparency = 0.1
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.Adornee = obj
-        hl.Parent = obj
-
-        local adornPart = gvGetTopPart(obj)
-        if not adornPart then
-            for _, descendant in ipairs(obj:GetDescendants()) do
-                if descendant:IsA("BasePart") and descendant.Name ~= "Handle" then
-                    adornPart = descendant
-                    break
-                end
-            end
-        end
-
-        if not adornPart then return end
-
-        local bb = Instance.new("BillboardGui")
-        bb.Name = "V1PR_GVBillboard"
-        bb.Size = UDim2.new(0, 150, 0, 24)
-        bb.Adornee = adornPart
-        bb.StudsOffset = Vector3.new(0, 3, 0)
-        bb.MaxDistance = gvEsp.maxDistance
-        bb.AlwaysOnTop = true
-        bb.Parent = obj
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = entityType
-        label.TextColor3 = color
-        label.TextStrokeColor3 = Color3.new(0, 0, 0)
-        label.TextStrokeTransparency = 0.3
-        label.TextSize = 11
-        label.Font = Enum.Font.GothamBold
-        label.Parent = bb
-
-        gvEsp.highlights[obj] = hl
-        gvEsp.billboards[obj] = bb
-
-        table.insert(gvEsp.connections, obj.AncestryChanged:Connect(function()
-            if not obj.Parent then
-                pcall(function()
-                    if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
-                    if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
-                    gvEsp.highlights[obj] = nil
-                    gvEsp.billboards[obj] = nil
-                end)
-            end
-        end))
-    end)
+    for _, child in ipairs(ingame:GetChildren()) do
+        gvEvaluateAndHighlight(child)
+    end
 end
 
-local function gvScan()
-    pcall(function()
-        if not gvEsp.on then return end
-
-        local map = svc.WS:FindFirstChild("Map")
-        if not map then return end
-
-        local ingame = map:FindFirstChild("Ingame")
-        if not ingame then return end
-
-        local myChar = lp.Character
-        local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        local myPos = myRoot and myRoot.Position or Vector3.new(0, 0, 0)
-
-        local toRemove = {}
-        for obj in pairs(gvEsp.highlights) do
-            if not obj or not obj.Parent then
-                table.insert(toRemove, obj)
+-- Clean up destroyed models to prevent memory leaks
+local function gvCleanupEntities()
+    for model, data in pairs(gvEsp.trackedEntities) do
+        if not model or not model.Parent or not model:IsDescendantOf(svc.WS) then
+            if data.Highlight then 
+                pcall(function() data.Highlight:Destroy() end)
             end
-        end
-
-        for _, obj in ipairs(toRemove) do
-            pcall(function()
-                if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
-                if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
-                gvEsp.highlights[obj] = nil
-                gvEsp.billboards[obj] = nil
-            end)
-        end
-
-        for _, child in ipairs(ingame:GetChildren()) do
-            local entityType = gvClassifyEntity(child)
-            if entityType then
-                if (entityType == "Groundbulb" and gvEsp.showGroundbulb) or 
-                   (entityType == "Vine" and gvEsp.showVine) then
-                    
-                    local attach = child:FindFirstChild("HumanoidRootPart") or 
-                                   child.PrimaryPart or 
-                                   child:FindFirstChildWhichIsA("BasePart")
-                    
-                    if attach and myRoot then
-                        local distance = (attach.Position - myPos).Magnitude
-                        if distance <= gvEsp.maxDistance then
-                            if not gvEsp.highlights[child] then
-                                gvCreate(child, entityType)
-                            end
-                        end
-                    end
-                end
+            if data.Billboard then 
+                pcall(function() data.Billboard:Destroy() end)
             end
+            gvEsp.trackedEntities[model] = nil
         end
-    end)
+    end
 end
+
+-- Main update loop
+local function gvUpdateLoop()
+    if not gvEsp.on then return end
+    gvCleanupEntities()
+    gvScanForSpawns()
+end
+
+-- Start the highlighter
+local gvConnection = nil
+local gvListenerConnection = nil
 
 local function gvStart()
-    pcall(function()
-        gvEsp.on = true
-        if gvEsp.scanThread then task.cancel(gvEsp.scanThread) end
-        gvEsp.scanThread = task.spawn(function()
-            while gvEsp.on do
-                pcall(gvScan)
-                task.wait(0.5)
-            end
-        end)
+    if gvEsp.on then return end
+    gvEsp.on = true
+    
+    print("[GV-ESP] Starting...")
+    task.wait(0.5)
+    gvScanForSpawns()
+    
+    if gvConnection then gvConnection:Disconnect() end
+    gvConnection = svc.Run.Heartbeat:Connect(function()
+        gvUpdateLoop()
     end)
+    
+    -- Listen for new models added to the "Ingame" folder
+    local function gvSetupListener()
+        local map = svc.WS:FindFirstChild("Map")
+        if map then
+            local ingame = map:FindFirstChild("Ingame")
+            if ingame then
+                if gvListenerConnection then gvListenerConnection:Disconnect() end
+                gvListenerConnection = ingame.ChildAdded:Connect(function(child)
+                    if child:IsA("Model") and gvEsp.on then
+                        task.wait(0.5)
+                        gvEvaluateAndHighlight(child)
+                    end
+                end)
+            end
+        end
+    end
+    
+    gvSetupListener()
+    print("[GV-ESP] Ready!")
 end
 
 local function gvStop()
-    pcall(function()
-        gvEsp.on = false
-        if gvEsp.scanThread then task.cancel(gvEsp.scanThread) end
-        gvEsp.scanThread = nil
-        
-        for obj, hl in pairs(gvEsp.highlights) do
-            pcall(function() hl:Destroy() end)
+    gvEsp.on = false
+    
+    if gvConnection then 
+        gvConnection:Disconnect()
+        gvConnection = nil
+    end
+    
+    if gvListenerConnection then
+        gvListenerConnection:Disconnect()
+        gvListenerConnection = nil
+    end
+    
+    -- Clean up all tracked entities
+    for model, data in pairs(gvEsp.trackedEntities) do
+        if data.Highlight then 
+            pcall(function() data.Highlight:Destroy() end)
         end
-        for obj, bb in pairs(gvEsp.billboards) do
-            pcall(function() bb:Destroy() end)
+        if data.Billboard then 
+            pcall(function() data.Billboard:Destroy() end)
         end
-        for _, conn in ipairs(gvEsp.connections) do
-            pcall(function() conn:Disconnect() end)
-        end
-        
-        gvEsp.highlights = {}
-        gvEsp.billboards = {}
-        gvEsp.connections = {}
-    end)
+    end
+    gvEsp.trackedEntities = {}
+    
+    print("[GV-ESP] Stopped")
 end
 
+-- UI Controls
 secGVEsp:Toggle({
     Title = "Enable Groundbulb & Vine ESP",
     Type = "Checkbox",
@@ -3140,7 +3122,11 @@ secGVEsp:Toggle({
     Default = gvEsp.on,
     Callback = function(on)
         pcall(function()
-            if on then gvStart() else gvStop() end
+            if on then 
+                gvStart() 
+            else 
+                gvStop() 
+            end
         end)
     end
 })
@@ -3154,19 +3140,8 @@ secGVEsp:Toggle({
         pcall(function()
             gvEsp.showGroundbulb = on
             if gvEsp.on then
-                local toRemove = {}
-                for obj in pairs(gvEsp.highlights) do
-                    local entityType = gvClassifyEntity(obj)
-                    if entityType == "Groundbulb" and not on then
-                        table.insert(toRemove, obj)
-                    end
-                end
-                for _, obj in ipairs(toRemove) do
-                    if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
-                    if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
-                    gvEsp.highlights[obj] = nil
-                    gvEsp.billboards[obj] = nil
-                end
+                gvCleanupEntities()
+                gvScanForSpawns()
             end
         end)
     end
@@ -3181,36 +3156,8 @@ secGVEsp:Toggle({
         pcall(function()
             gvEsp.showVine = on
             if gvEsp.on then
-                local toRemove = {}
-                for obj in pairs(gvEsp.highlights) do
-                    local entityType = gvClassifyEntity(obj)
-                    if entityType == "Vine" and not on then
-                        table.insert(toRemove, obj)
-                    end
-                end
-                for _, obj in ipairs(toRemove) do
-                    if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
-                    if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
-                    gvEsp.highlights[obj] = nil
-                    gvEsp.billboards[obj] = nil
-                end
-            end
-        end)
-    end
-})
-
-secGVEsp:Slider({
-    Title = "Max Distance",
-    Flag = "gvMaxDistance",
-    Step = 10,
-    Value = { Min = 50, Max = 500, Default = gvEsp.maxDistance },
-    Callback = function(v)
-        pcall(function()
-            gvEsp.maxDistance = v
-            for obj, bb in pairs(gvEsp.billboards) do
-                if bb and bb.Parent then
-                    bb.MaxDistance = v
-                end
+                gvCleanupEntities()
+                gvScanForSpawns()
             end
         end)
     end
@@ -3220,13 +3167,13 @@ secGVEsp:Slider({
     Title = "Highlight Transparency",
     Flag = "gvTransparency",
     Step = 0.05,
-    Value = { Min = 0.1, Max = 1.0, Default = gvEsp.transparency },
+    Value = { Min = 0.1, Max = 1.0, Default = gvConfig.FillTransparency },
     Callback = function(v)
         pcall(function()
-            gvEsp.transparency = v
-            for obj, hl in pairs(gvEsp.highlights) do
-                if hl and hl.Parent then
-                    hl.FillTransparency = v
+            gvConfig.FillTransparency = v
+            for _, data in pairs(gvEsp.trackedEntities) do
+                if data.Highlight then
+                    data.Highlight.FillTransparency = v
                 end
             end
         end)
@@ -3234,34 +3181,49 @@ secGVEsp:Slider({
 })
 
 secGVEsp:Button({
-    Title = "Refresh G&V ESP",
+    Title = "Refresh ESP",
     Callback = function()
         pcall(function()
             if gvEsp.on then
-                gvStop()
-                task.wait(0.2)
-                gvStart()
+                gvCleanupEntities()
+                gvScanForSpawns()
+                print("[GV-ESP] Refreshed")
             end
         end)
     end
 })
 
+secGVEsp:Button({
+    Title = "Clear All Highlights",
+    Callback = function()
+        pcall(function()
+            for model, data in pairs(gvEsp.trackedEntities) do
+                if data.Highlight then 
+                    pcall(function() data.Highlight:Destroy() end)
+                end
+                if data.Billboard then 
+                    pcall(function() data.Billboard:Destroy() end)
+                end
+            end
+            gvEsp.trackedEntities = {}
+            print("[GV-ESP] Cleared all highlights")
+        end)
+    end
+})
+
+-- Handle character respawn
 lp.CharacterAdded:Connect(function()
-    task.wait(1)
+    task.wait(2)
     if gvEsp.on then
         pcall(function()
-            for obj, hl in pairs(gvEsp.highlights) do
-                pcall(function() hl:Destroy() end)
-            end
-            for obj, bb in pairs(gvEsp.billboards) do
-                pcall(function() bb:Destroy() end)
-            end
-            gvEsp.highlights = {}
-            gvEsp.billboards = {}
+            gvCleanupEntities()
+            gvScanForSpawns()
         end)
-        gvStart()
     end
 end)
+
+print("[GV-ESP] Groundbulb & Vine ESP integrated")
+
 end -- tabESP
 do -- tabMusic
 local tabMusic = win:Tab({ Title = "Music", Icon = "music" })
@@ -4580,7 +4542,8 @@ chanceMiscSec:Button({
 
 local tabDusekkar = win:Tab({ Title = "Dusekkar", Icon = "zap" })
 
-local plasma_enabled = falselocal plasma_aimOffset = 0.0
+local plasma_enabled = false
+local plasma_aimOffset = 0.0
 local plasma_prediction = 0.12
 local plasma_rf = nil
 local plasma_motionData = {}
