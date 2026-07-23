@@ -2588,7 +2588,7 @@ local function espCreate(obj, color, labelText, isCharacter)
                     esp.hlMonitorConns[obj] = nil
                 end)
             end
-        end)
+        end))
     end)
 end
 
@@ -2914,7 +2914,7 @@ secMinion:Slider({ Title="Highlight Transparency", Flag="espMinionTrans", Step=0
 secMinion:Button({ Title="Force Rescan", Callback=function() pcall(function() clearTag("pizza"); clearTag("zombie"); clearTag("puddle"); task.wait(0.1); scanPizza(); scanZombie(); scanPuddles() end) end })
 
 -- ============================================================
--- GROUNDBULB & VINE ESP (Updated - Filters HumanoidRootPart for Vine)
+-- INTEGRATED GROUNDBULB & VINE ESP
 -- ============================================================
 
 local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine ESP", Opened = true })
@@ -2924,9 +2924,12 @@ local gvEsp = {
     showGroundbulb = true,
     showVine = true,
     maxDistance = 200,
-    transparency = 0.5,
+    transparency = 0.85, -- safer default: high enough to avoid purple screen stacking
     scanThread = nil,
-    trackedEntities = {},
+    heartbeatConn = nil, -- Heartbeat connection for per-frame cleanup (from standalone)
+    listenerConn = nil,  -- ChildAdded listener (from standalone)
+    highlights = {},
+    billboards = {},
     connections = {},
 }
 
@@ -2935,17 +2938,12 @@ local GV_COLORS = {
     Vine = Color3.fromRGB(170, 0, 255),
 }
 
--- Function to find the highest part or flower part of the model for top positioning
-local function gvGetTopPart(model, entityType)
+local function gvGetTopPart(model)
     local highestPart = model.PrimaryPart
     local highestY = highestPart and highestPart.Position.Y or -math.huge
 
     for _, descendant in ipairs(model:GetDescendants()) do
         if descendant:IsA("BasePart") then
-            -- Skip HumanoidRootPart for Vine entities
-            if entityType == "Vine" and descendant.Name == "HumanoidRootPart" then
-                continue
-            end
             if descendant.Name:find("Flower") or descendant.Position.Y > highestY then
                 highestY = descendant.Position.Y
                 highestPart = descendant
@@ -2985,20 +2983,31 @@ end
 
 local function gvCreate(obj, entityType)
     pcall(function()
-        if not obj or not obj.Parent or gvEsp.trackedEntities[obj] then return end
+        if not obj or not obj.Parent or gvEsp.highlights[obj] then return end
+
+        -- Conflict guard: skip if the main ESP already placed a Highlight on this object.
+        -- Two AlwaysOnTop Highlights on the same model is what causes the purple screen.
+        if obj:FindFirstChild("V1PR_Highlight") then return end
 
         local color = GV_COLORS[entityType]
         if not color then return end
 
-        -- Find the highest part (the flower/top) to attach the billboard to
-        local adornPart = gvGetTopPart(obj, entityType)
+        local hl = Instance.new("Highlight")
+        hl.Name = "V1PR_GVHighlight"
+        hl.FillColor = color
+        hl.FillTransparency = gvEsp.transparency
+        hl.OutlineColor = color
+        hl.OutlineTransparency = 0
+        -- Occluded instead of AlwaysOnTop: prevents the highlight from bleeding
+        -- through geometry and stacking with other highlights into a purple wash.
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Adornee = obj
+        hl.Parent = obj
+
+        local adornPart = gvGetTopPart(obj)
         if not adornPart then
             for _, descendant in ipairs(obj:GetDescendants()) do
                 if descendant:IsA("BasePart") and descendant.Name ~= "Handle" then
-                    -- Skip HumanoidRootPart for Vine entities
-                    if entityType == "Vine" and descendant.Name == "HumanoidRootPart" then
-                        continue
-                    end
                     adornPart = descendant
                     break
                 end
@@ -3007,22 +3016,6 @@ local function gvCreate(obj, entityType)
 
         if not adornPart then return end
 
-        if not obj.PrimaryPart then
-            obj.PrimaryPart = adornPart
-        end
-
-        -- Create Highlight
-        local hl = Instance.new("Highlight")
-        hl.Name = "V1PR_GVHighlight"
-        hl.FillColor = color
-        hl.FillTransparency = gvEsp.transparency
-        hl.OutlineColor = color
-        hl.OutlineTransparency = 0.1
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.Adornee = obj
-        hl.Parent = obj
-
-        -- Create BillboardGui
         local bb = Instance.new("BillboardGui")
         bb.Name = "V1PR_GVBillboard"
         bb.Size = UDim2.new(0, 200, 0, 30)
@@ -3033,43 +3026,45 @@ local function gvCreate(obj, entityType)
         bb.Parent = obj
 
         local label = Instance.new("TextLabel")
-        label.Name = "Label"
         label.Size = UDim2.new(1, 0, 1, 0)
         label.BackgroundTransparency = 1
         label.Text = entityType
         label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        label.TextStrokeColor3 = Color3.new(0, 0, 0)
         label.TextStrokeTransparency = 0.3
-        label.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
         label.TextSize = 16
+        label.Font = Enum.Font.GothamBold
         label.Parent = bb
 
-        gvEsp.trackedEntities[obj] = {
-            Model = obj,
-            Highlight = hl,
-            Billboard = bb,
-        }
+        gvEsp.highlights[obj] = hl
+        gvEsp.billboards[obj] = bb
 
+        -- Per-object cleanup when it gets removed from workspace
         table.insert(gvEsp.connections, obj.AncestryChanged:Connect(function()
             if not obj.Parent then
                 pcall(function()
-                    if gvEsp.trackedEntities[obj] then
-                        if gvEsp.trackedEntities[obj].Highlight then gvEsp.trackedEntities[obj].Highlight:Destroy() end
-                        if gvEsp.trackedEntities[obj].Billboard then gvEsp.trackedEntities[obj].Billboard:Destroy() end
-                        gvEsp.trackedEntities[obj] = nil
-                    end
+                    if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
+                    if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
+                    gvEsp.highlights[obj] = nil
+                    gvEsp.billboards[obj] = nil
                 end)
             end
         end))
     end)
 end
 
+-- Lightweight cleanup that runs every Heartbeat (from standalone).
+-- Catches stale highlights immediately instead of waiting 0.5s,
+-- which was what allowed them to stack and cause the purple wash.
 local function gvCleanup()
-    for model, data in pairs(gvEsp.trackedEntities) do
-        if not model or not model.Parent or not model:IsDescendantOf(workspace) then
-            if data.Highlight then data.Highlight:Destroy() end
-            if data.Billboard then data.Billboard:Destroy() end
-            gvEsp.trackedEntities[model] = nil
+    for obj in pairs(gvEsp.highlights) do
+        if not obj or not obj.Parent or not obj:IsDescendantOf(svc.WS) then
+            pcall(function()
+                if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
+                if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
+                gvEsp.highlights[obj] = nil
+                gvEsp.billboards[obj] = nil
+            end)
         end
     end
 end
@@ -3077,8 +3072,6 @@ end
 local function gvScan()
     pcall(function()
         if not gvEsp.on then return end
-
-        gvCleanup()
 
         local map = svc.WS:FindFirstChild("Map")
         if not map then return end
@@ -3093,28 +3086,17 @@ local function gvScan()
         for _, child in ipairs(ingame:GetChildren()) do
             local entityType = gvClassifyEntity(child)
             if entityType then
-                if (entityType == "Groundbulb" and gvEsp.showGroundbulb) or 
+                if (entityType == "Groundbulb" and gvEsp.showGroundbulb) or
                    (entityType == "Vine" and gvEsp.showVine) then
-                    
-                    local attach = child:FindFirstChild("HumanoidRootPart") or 
-                                   child.PrimaryPart or 
+
+                    local attach = child:FindFirstChild("HumanoidRootPart") or
+                                   child.PrimaryPart or
                                    child:FindFirstChildWhichIsA("BasePart")
-                    
-                    -- Skip HumanoidRootPart for Vine entities when checking distance
-                    if entityType == "Vine" and attach and attach.Name == "HumanoidRootPart" then
-                        -- Find an alternative part for distance checking
-                        for _, part in ipairs(child:GetDescendants()) do
-                            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                                attach = part
-                                break
-                            end
-                        end
-                    end
-                    
+
                     if attach and myRoot then
                         local distance = (attach.Position - myPos).Magnitude
                         if distance <= gvEsp.maxDistance then
-                            if not gvEsp.trackedEntities[child] then
+                            if not gvEsp.highlights[child] then
                                 gvCreate(child, entityType)
                             end
                         end
@@ -3125,9 +3107,42 @@ local function gvScan()
     end)
 end
 
+-- Sets up a ChildAdded listener on Ingame so new spawns are caught instantly
+-- without waiting for the next 0.5s scan tick (from standalone).
+local function gvSetupListener()
+    pcall(function()
+        if gvEsp.listenerConn then
+            gvEsp.listenerConn:Disconnect()
+            gvEsp.listenerConn = nil
+        end
+
+        local map = svc.WS:FindFirstChild("Map")
+        if not map then return end
+        local ingame = map:FindFirstChild("Ingame")
+        if not ingame then return end
+
+        gvEsp.listenerConn = ingame.ChildAdded:Connect(function(child)
+            if not gvEsp.on then return end
+            if child:IsA("Model") then
+                task.wait(0.5) -- brief wait for descendants to load
+                pcall(function()
+                    local entityType = gvClassifyEntity(child)
+                    if not entityType then return end
+                    if (entityType == "Groundbulb" and gvEsp.showGroundbulb) or
+                       (entityType == "Vine" and gvEsp.showVine) then
+                        gvCreate(child, entityType)
+                    end
+                end)
+            end
+        end)
+    end)
+end
+
 local function gvStart()
     pcall(function()
         gvEsp.on = true
+
+        -- Interval scan thread (catches anything the listener misses)
         if gvEsp.scanThread then task.cancel(gvEsp.scanThread) end
         gvEsp.scanThread = task.spawn(function()
             while gvEsp.on do
@@ -3135,57 +3150,49 @@ local function gvStart()
                 task.wait(0.5)
             end
         end)
+
+        -- Heartbeat cleanup so stale highlights are wiped every frame, not every 0.5s
+        if gvEsp.heartbeatConn then gvEsp.heartbeatConn:Disconnect() end
+        gvEsp.heartbeatConn = svc.Run.Heartbeat:Connect(function()
+            if gvEsp.on then
+                pcall(gvCleanup)
+            end
+        end)
+
+        -- ChildAdded listener for instant reaction to new spawns
+        gvSetupListener()
     end)
 end
 
 local function gvStop()
     pcall(function()
         gvEsp.on = false
+
         if gvEsp.scanThread then task.cancel(gvEsp.scanThread) end
         gvEsp.scanThread = nil
-        
-        for model, data in pairs(gvEsp.trackedEntities) do
-            if data.Highlight then pcall(function() data.Highlight:Destroy() end) end
-            if data.Billboard then pcall(function() data.Billboard:Destroy() end) end
+
+        if gvEsp.heartbeatConn then gvEsp.heartbeatConn:Disconnect() end
+        gvEsp.heartbeatConn = nil
+
+        if gvEsp.listenerConn then gvEsp.listenerConn:Disconnect() end
+        gvEsp.listenerConn = nil
+
+        for obj, hl in pairs(gvEsp.highlights) do
+            pcall(function() hl:Destroy() end)
+        end
+        for obj, bb in pairs(gvEsp.billboards) do
+            pcall(function() bb:Destroy() end)
         end
         for _, conn in ipairs(gvEsp.connections) do
             pcall(function() conn:Disconnect() end)
         end
-        
-        gvEsp.trackedEntities = {}
+
+        gvEsp.highlights = {}
+        gvEsp.billboards = {}
         gvEsp.connections = {}
     end)
 end
 
--- Setup listener for new models added to Ingame
-local function gvSetupListener()
-    pcall(function()
-        local map = svc.WS:FindFirstChild("Map")
-        if map then
-            local ingame = map:FindFirstChild("Ingame")
-            if ingame then
-                ingame.ChildAdded:Connect(function(child)
-                    if gvEsp.on and child:IsA("Model") then
-                        task.wait(0.5)
-                        local entityType = gvClassifyEntity(child)
-                        if entityType then
-                            if (entityType == "Groundbulb" and gvEsp.showGroundbulb) or 
-                               (entityType == "Vine" and gvEsp.showVine) then
-                                if not gvEsp.trackedEntities[child] then
-                                    gvCreate(child, entityType)
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-end
-
-task.spawn(gvSetupListener)
-
--- GV ESP UI Controls
 secGVEsp:Toggle({
     Title = "Enable Groundbulb & Vine ESP",
     Type = "Checkbox",
@@ -3208,18 +3215,17 @@ secGVEsp:Toggle({
             gvEsp.showGroundbulb = on
             if gvEsp.on then
                 local toRemove = {}
-                for obj in pairs(gvEsp.trackedEntities) do
+                for obj in pairs(gvEsp.highlights) do
                     local entityType = gvClassifyEntity(obj)
                     if entityType == "Groundbulb" and not on then
                         table.insert(toRemove, obj)
                     end
                 end
                 for _, obj in ipairs(toRemove) do
-                    if gvEsp.trackedEntities[obj] then
-                        if gvEsp.trackedEntities[obj].Highlight then gvEsp.trackedEntities[obj].Highlight:Destroy() end
-                        if gvEsp.trackedEntities[obj].Billboard then gvEsp.trackedEntities[obj].Billboard:Destroy() end
-                        gvEsp.trackedEntities[obj] = nil
-                    end
+                    if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
+                    if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
+                    gvEsp.highlights[obj] = nil
+                    gvEsp.billboards[obj] = nil
                 end
             end
         end)
@@ -3236,18 +3242,17 @@ secGVEsp:Toggle({
             gvEsp.showVine = on
             if gvEsp.on then
                 local toRemove = {}
-                for obj in pairs(gvEsp.trackedEntities) do
+                for obj in pairs(gvEsp.highlights) do
                     local entityType = gvClassifyEntity(obj)
                     if entityType == "Vine" and not on then
                         table.insert(toRemove, obj)
                     end
                 end
                 for _, obj in ipairs(toRemove) do
-                    if gvEsp.trackedEntities[obj] then
-                        if gvEsp.trackedEntities[obj].Highlight then gvEsp.trackedEntities[obj].Highlight:Destroy() end
-                        if gvEsp.trackedEntities[obj].Billboard then gvEsp.trackedEntities[obj].Billboard:Destroy() end
-                        gvEsp.trackedEntities[obj] = nil
-                    end
+                    if gvEsp.highlights[obj] then gvEsp.highlights[obj]:Destroy() end
+                    if gvEsp.billboards[obj] then gvEsp.billboards[obj]:Destroy() end
+                    gvEsp.highlights[obj] = nil
+                    gvEsp.billboards[obj] = nil
                 end
             end
         end)
@@ -3262,9 +3267,9 @@ secGVEsp:Slider({
     Callback = function(v)
         pcall(function()
             gvEsp.maxDistance = v
-            for model, data in pairs(gvEsp.trackedEntities) do
-                if data.Billboard and data.Billboard.Parent then
-                    data.Billboard.MaxDistance = v
+            for obj, bb in pairs(gvEsp.billboards) do
+                if bb and bb.Parent then
+                    bb.MaxDistance = v
                 end
             end
         end)
@@ -3275,13 +3280,13 @@ secGVEsp:Slider({
     Title = "Highlight Transparency",
     Flag = "gvTransparency",
     Step = 0.05,
-    Value = { Min = 0.1, Max = 1.0, Default = gvEsp.transparency },
+    Value = { Min = 0.5, Max = 1.0, Default = gvEsp.transparency },
     Callback = function(v)
         pcall(function()
             gvEsp.transparency = v
-            for model, data in pairs(gvEsp.trackedEntities) do
-                if data.Highlight and data.Highlight.Parent then
-                    data.Highlight.FillTransparency = v
+            for obj, hl in pairs(gvEsp.highlights) do
+                if hl and hl.Parent then
+                    hl.FillTransparency = v
                 end
             end
         end)
@@ -3305,21 +3310,21 @@ lp.CharacterAdded:Connect(function()
     task.wait(1)
     if gvEsp.on then
         pcall(function()
-            for model, data in pairs(gvEsp.trackedEntities) do
-                if data.Highlight then pcall(function() data.Highlight:Destroy() end) end
-                if data.Billboard then pcall(function() data.Billboard:Destroy() end) end
+            for obj, hl in pairs(gvEsp.highlights) do
+                pcall(function() hl:Destroy() end)
             end
-            gvEsp.trackedEntities = {}
+            for obj, bb in pairs(gvEsp.billboards) do
+                pcall(function() bb:Destroy() end)
+            end
+            gvEsp.highlights = {}
+            gvEsp.billboards = {}
         end)
+        -- Restart everything including the ChildAdded listener
+        -- so it re-attaches to the correct Ingame folder after respawn
         gvStart()
     end
 end)
 end -- tabESP
-
--- ============================================================
--- MUSIC TAB
--- ============================================================
-
 do -- tabMusic
 local tabMusic = win:Tab({ Title = "Music", Icon = "music" })
 local secLMS   = tabMusic:Section({ Title = "LMS Music", Opened = true })
@@ -3401,7 +3406,8 @@ local function musicGetSound()
     local snd = svc.WS:FindFirstChild("Themes") and svc.WS.Themes:FindFirstChild("LastSurvivor")
         or svc.WS:FindFirstChild("LastSurvivor", true) or svc.SoundService:FindFirstChild("LastSurvivor", true)
     if snd and snd:IsA("Sound") then music.cachedSound=snd; return snd end
-    music.cachedSound=nil; return nil end
+    music.cachedSound=nil; return nil
+end
 
 local function musicPlay(name)
     pcall(function()
@@ -4636,8 +4642,7 @@ chanceMiscSec:Button({
 
 local tabDusekkar = win:Tab({ Title = "Dusekkar", Icon = "zap" })
 
-local plasma_enabled = false
-local plasma_aimOffset = 0.0
+local plasma_enabled = falselocal plasma_aimOffset = 0.0
 local plasma_prediction = 0.12
 local plasma_rf = nil
 local plasma_motionData = {}
