@@ -83,6 +83,77 @@ local svc = {
 local lp  = svc.Players.LocalPlayer
 local gui = lp:WaitForChild("PlayerGui", 10)
 
+-- ============================================================
+-- JUMP DISABLE SYSTEM - Delete in game, restore in lobby
+-- ============================================================
+local jumpButtonBackup = nil
+
+local function deleteJump()
+    pcall(function()
+        local touchGui = gui:FindFirstChild("TouchGui")
+        if touchGui then
+            local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame")
+            if touchControlFrame then
+                local jumpButton = touchControlFrame:FindFirstChild("JumpButton")
+                if jumpButton then
+                    jumpButtonBackup = jumpButton:Clone() -- Backup for later
+                    jumpButton:Destroy()
+                    print("[betrayalhub] Jump button DELETED - Game started!")
+                end
+            end
+        end
+    end)
+end
+
+local function restoreJump()
+    pcall(function()
+        local touchGui = gui:FindFirstChild("TouchGui")
+        if touchGui then
+            local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame")
+            if touchControlFrame then
+                local jumpButton = touchControlFrame:FindFirstChild("JumpButton")
+                if not jumpButton and jumpButtonBackup then
+                    local newJump = jumpButtonBackup:Clone()
+                    newJump.Parent = touchControlFrame
+                    print("[betrayalhub] Jump button RESTORED - Lobby/Dead!")
+                end
+            end
+        end
+    end)
+end
+
+-- Monitor character state
+local function onCharacterAdded(character)
+    task.wait(0.5)
+    deleteJump() -- Delete when spawn as survivor/killer
+    
+    -- Monitor for death
+    local humanoid = character:WaitForChild("Humanoid")
+    humanoid.Died:Connect(function()
+        task.wait(1)
+        restoreJump() -- Restore when dead
+        print("[betrayalhub] You died - jump restored!")
+    end)
+end
+
+lp.CharacterAdded:Connect(onCharacterAdded)
+
+-- Initial backup
+task.spawn(function()
+    task.wait(2)
+    local touchGui = gui:FindFirstChild("TouchGui")
+    if touchGui then
+        local touchControlFrame = touchGui:FindFirstChild("TouchControlFrame")
+        if touchControlFrame then
+            local jumpButton = touchControlFrame:FindFirstChild("JumpButton")
+            if jumpButton then
+                jumpButtonBackup = jumpButton:Clone()
+                print("[betrayalhub] Jump button backed up")
+            end
+        end
+    end)
+end)
+
 local fs = {
     hasFolder = isfolder     or function() return false end,
     makeFolder= makefolder   or function() end,
