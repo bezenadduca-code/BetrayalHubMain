@@ -167,6 +167,21 @@ pcall(function()
         SideBarWidth   = 150,
         HideSearchBar  = true,
         ScrollBarEnabled = false,
+        
+        -- ============================================================
+        -- KEY SYSTEM CONFIGURATION
+        -- ============================================================
+        KeySystem = {
+          
+            Key = { "RELEASE" },
+           
+            Note = "Enter the key to access BetrayalHub",
+            
+            URL = "https://discord.gg/H5GdzJA2Nb",
+            
+            SaveKey = true,
+            
+        },
     })
 end)
 
