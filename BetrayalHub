@@ -175,7 +175,7 @@ pcall(function()
           
             Key = { "RELEASE" },
            
-            Note = "Enter the key to access BetrayalHub",
+            Note = "join the server for key its in Script",
             
             URL = "https://discord.gg/H5GdzJA2Nb",
             
