@@ -2353,6 +2353,15 @@ local esp = {
     itemCacheTime = 0, structCacheTime = 0, cacheLife = 5,
 }
 
+-- Groundbulb & Vine ESP initialization (moved to top to prevent nil error)
+local gvEsp = {
+    on = false,
+    showGroundbulb = true,
+    showVine = true,
+    scanInterval = 0.5,
+    trackedEntities = {},
+}
+
 -- Generator label system
 local genLabels = {}
 local genConns  = {}
@@ -2930,14 +2939,6 @@ secMinion:Button({ Title="Force Rescan", Callback=function() pcall(function() cl
 -- ============================================================
 
 local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine Settings", Opened = false })
-
-local gvEsp = {
-    on = false,
-    showGroundbulb = true,
-    showVine = true,
-    scanInterval = 0.5,
-    trackedEntities = {},
-}
 
 local gvConfig = {
     HighlightColor = Color3.fromRGB(170, 0, 255),
