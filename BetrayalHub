@@ -572,13 +572,11 @@ secQTE:Toggle({
     Title = "Enable Disarm QTE",
     Type = "Checkbox",
     Flag = "disarmQTEEnabled",
-    Default = qteConfig and qteConfig.enabled or false,
+    Default = qteConfig.enabled,
     Callback = function(on)
         pcall(function()
-            if qteConfig then
-                qteConfig.enabled = on
-                if on then disarmQTEStart() else disarmQTEStop() end
-            end
+            qteConfig.enabled = on
+            if on then disarmQTEStart() else disarmQTEStop() end
         end)
     end
 })
@@ -1163,7 +1161,7 @@ local function stamStop()
 end
 
 secStamina:Toggle({ Title = "Custom Stamina", Type = "Checkbox", Flag = "stamOn", Default = stam.on,
-    Callback = function(on) pcall(function() stam.on = on; if on then stamStart() else stamStop() end end) end })
+    Callback = function(on) pcall(function() if stam then stam.on = on; if on then stamStart() else stamStop() end end end) end })
 
 secStamina:Slider({ Title = "Loss Rate",     Flag = "stamLoss", Step = 1, Value = { Min = 0,  Max = 50,  Default = stam.loss    }, Callback = function(v) pcall(function() stam.loss = v end) end })
 secStamina:Slider({ Title = "Gain Rate",     Flag = "stamGain", Step = 1, Value = { Min = 0,  Max = 50,  Default = stam.gain    }, Callback = function(v) pcall(function() stam.gain = v end) end })
@@ -1236,7 +1234,7 @@ end)
 if speedHack.on then speedStart() end
 
 secSpeed:Toggle({ Title="Custom Sprint Speed", Type="Checkbox", Flag="speedOn", Default=speedHack.on,
-    Callback=function(on) pcall(function() speedHack.on=on; speedHack.lastApplied=0; if on then speedStart() else speedStop() end end) end })
+    Callback=function(on) pcall(function() if speedHack then speedHack.on=on; speedHack.lastApplied=0; if on then speedStart() else speedStop() end end end) end })
 
 secSpeed:Input({ Title="Sprint Speed Value", Flag="speedValue", CurrentValue=tostring(speedHack.speed), Placeholder="e.g. 30",
     Callback=function(t) pcall(function() local n=tonumber(t); if n and n>0 and n<=200 then speedHack.speed=n; speedHack.lastApplied=0 end end) end })
@@ -1383,7 +1381,7 @@ local function hbStop()
 end
 
 secHitbox:Toggle({ Title = "Hitbox Expander", Type = "Checkbox", Flag = "hbOn", Default = hb.on,
-    Callback = function(on) pcall(function() hb.on = on; if on then hbStart() else hbStop() end end) end })
+    Callback = function(on) pcall(function() if hb then hb.on = on; if on then hbStart() else hbStop() end end end) end })
 
 secHitbox:Slider({ Title = "Strength", Flag = "hbStrength", Step = 1, Value = { Min = 5, Max = 100, Default = hb.strength },
     Callback = function(v) pcall(function() hb.strength = v end) end })
@@ -1620,8 +1618,8 @@ secAutoCollision:Toggle({
     Title = "Push Hitbox on Ability", Type = "Checkbox", Flag = "acOn", Default = ac.on,
     Callback = function(on)
         pcall(function()
-            ac.on = on; 
-            if not on then for k in pairs(ac.active) do ac.active[k] = nil end; ac.chaseTarget = nil; ac.damageTarget = nil end
+            if ac then ac.on = on; 
+            if not on then for k in pairs(ac.active) do ac.active[k] = nil end; ac.chaseTarget = nil; ac.damageTarget = nil end end
         end)
     end
 })
@@ -1725,7 +1723,7 @@ do
     end)
 end
 
-secGenAuto:Toggle({ Title = "Auto Solve", Type = "Checkbox", Flag = "flowOn", Default = flow.on, Callback = function(on) pcall(function() flow.on = on end) end })
+secGenAuto:Toggle({ Title = "Auto Solve", Type = "Checkbox", Flag = "flowOn", Default = flow.on, Callback = function(on) pcall(function() if flow then flow.on = on end end) end })
 secGenAuto:Slider({ Title = "Node Speed", Flag = "flowNodeDelay", Step = 0.02, Value = { Min = 0.01, Max = 0.50, Default = flow.nodeDelay }, Callback = function(v) pcall(function() flow.nodeDelay = v end) end })
 secGenAuto:Slider({ Title = "Line Pause", Flag = "flowLineDelay", Step = 0.10, Value = { Min = 0.00, Max = 1.00, Default = flow.lineDelay }, Callback = function(v) pcall(function() flow.lineDelay = v end) end })
 
@@ -2767,7 +2765,9 @@ catSection:Toggle({ Title="Structures", Type="Checkbox", Flag="espStructures", D
 catSection:Toggle({ Title="Groundbulb & Vine", Type="Checkbox", Flag="gvEspOn", Default=gvEsp.on,
     Callback=function(on)
         pcall(function()
-            if on then gvStart() else gvStop() end
+            if gvEsp then
+                if on then gvStart() else gvStop() end
+            end
         end)
     end })
 
