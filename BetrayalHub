@@ -1170,8 +1170,8 @@ secStamina:Slider({ Title = "Current Value", Flag = "stamCurrent", Step = 1, Val
 secStamina:Toggle({ Title = "Infinite Stamina", Type = "Checkbox", Flag = "stamNoLoss", Default = stam.noLoss,
     Callback = function(on)
         pcall(function()
-            stam.noLoss = on; stamApply()
-            if on and not stam.on then stam.on = true; stamStart() end
+            stam.noLoss = on
+            stamApply()
         end)
     end
 })
@@ -1312,9 +1312,9 @@ local function statusToggle(name)
     end)
 end
 
-secStatus:Button({ Title = "Toggle: Slowness",       Callback = function() statusToggle("Slowness")      end })
-secStatus:Button({ Title = "Toggle: Hallucination",  Callback = function() statusToggle("Hallucination") end })
-secStatus:Button({ Title = "Toggle: Visual Effects", Callback = function() statusToggle("Visual")        end })
+secStatus:Toggle({ Title = "Disable Slowness",       Default = false, Callback = function(v) if v then statusToggle("Slowness") end end })
+secStatus:Toggle({ Title = "Disable Hallucination",  Default = false, Callback = function(v) if v then statusToggle("Hallucination") end end })
+secStatus:Toggle({ Title = "Disable Visual Effects", Default = false, Callback = function(v) if v then statusToggle("Visual") end end })
 
 lp.CharacterAdded:Connect(function()
     pcall(function()
@@ -2762,6 +2762,13 @@ catSection:Toggle({ Title="Items", Type="Checkbox", Flag="espItems", Default=esp
 catSection:Toggle({ Title="Structures", Type="Checkbox", Flag="espStructures", Default=esp.showStructures,
     Callback=function(on) pcall(function() esp.showStructures=on; if esp.enabled then espClearAll(); espStart() end end) end })
 
+catSection:Toggle({ Title="Groundbulb & Vine", Type="Checkbox", Flag="gvEspOn", Default=gvEsp.on,
+    Callback=function(on)
+        pcall(function()
+            if on then gvStart() else gvStop() end
+        end)
+    end })
+
 local visSection = tabESP:Section({ Title = "Visual Settings", Opened = true })
 
 visSection:Slider({ Title="Max Distance", Flag="espMaxDistance", Step=10, Value={Min=50,Max=500,Default=esp.maxDistance},
@@ -2920,7 +2927,7 @@ secMinion:Button({ Title="Force Rescan", Callback=function() pcall(function() cl
 -- GROUNDBULB & VINE ESP (Integrated Working Version - FIXED)
 -- ============================================================
 
-local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine ESP", Opened = true })
+local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine Settings", Opened = false })
 
 local gvEsp = {
     on = false,
@@ -3011,7 +3018,7 @@ local function gvHighlightEntity(model, displayName)
     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     label.TextStrokeTransparency = 0.3
     label.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    label.TextSize = 16
+    label.TextSize = 12
     label.Parent = billboard
 
     -- Store the entity and its associated objects for cleanup
@@ -3163,22 +3170,6 @@ local function gvStop()
 end
 
 -- UI Controls
-secGVEsp:Toggle({
-    Title = "Enable Groundbulb & Vine ESP",
-    Type = "Checkbox",
-    Flag = "gvEspOn",
-    Default = gvEsp.on,
-    Callback = function(on)
-        pcall(function()
-            if on then 
-                gvStart() 
-            else 
-                gvStop() 
-            end
-        end)
-    end
-})
-
 secGVEsp:Toggle({
     Title = "Show Groundbulb",
     Type = "Checkbox",
