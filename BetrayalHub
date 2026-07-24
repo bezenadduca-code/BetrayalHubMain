@@ -572,11 +572,13 @@ secQTE:Toggle({
     Title = "Enable Disarm QTE",
     Type = "Checkbox",
     Flag = "disarmQTEEnabled",
-    Default = qteConfig.enabled,
+    Default = qteConfig and qteConfig.enabled or false,
     Callback = function(on)
         pcall(function()
-            qteConfig.enabled = on
-            if on then disarmQTEStart() else disarmQTEStop() end
+            if qteConfig then
+                qteConfig.enabled = on
+                if on then disarmQTEStart() else disarmQTEStop() end
+            end
         end)
     end
 })
