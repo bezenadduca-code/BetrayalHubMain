@@ -1,82 +1,4 @@
 -- ══════════════════════════════════════════════
---  ERROR DISPLAY SYSTEM
--- ══════════════════════════════════════════════
-local function showErrorScreen(title, message, stackTrace)
-    pcall(function()
-        local Players = game:GetService("Players")
-        local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui", 5)
-        
-        local errorGui = Instance.new("ScreenGui")
-        errorGui.Name = "ErrorGui"
-        errorGui.ResetOnSpawn = false
-        errorGui.Parent = PlayerGui
-        
-        local bg = Instance.new("Frame")
-        bg.Name = "Background"
-        bg.Size = UDim2.new(0, 600, 0, 400)
-        bg.Position = UDim2.new(0.5, -300, 0.5, -200)
-        bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        bg.BorderSizePixel = 0
-        bg.Parent = errorGui
-        
-        local titleLabel = Instance.new("TextLabel")
-        titleLabel.Name = "Title"
-        titleLabel.Size = UDim2.new(1, 0, 0, 50)
-        titleLabel.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-        titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        titleLabel.TextSize = 24
-        titleLabel.Font = Enum.Font.GothamBold
-        titleLabel.Text = "⚠️ " .. title
-        titleLabel.BorderSizePixel = 0
-        titleLabel.Parent = bg
-        
-        local messageLabel = Instance.new("TextLabel")
-        messageLabel.Name = "Message"
-        messageLabel.Size = UDim2.new(1, -20, 0, 100)
-        messageLabel.Position = UDim2.new(0, 10, 0, 60)
-        messageLabel.BackgroundTransparency = 1
-        messageLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        messageLabel.TextSize = 16
-        messageLabel.Font = Enum.Font.Gotham
-        messageLabel.Text = message
-        messageLabel.TextWrapped = true
-        messageLabel.TextXAlignment = Enum.TextXAlignment.Left
-        messageLabel.TextYAlignment = Enum.TextYAlignment.Top
-        messageLabel.Parent = bg
-        
-        local stackLabel = Instance.new("TextLabel")
-        stackLabel.Name = "Stack"
-        stackLabel.Size = UDim2.new(1, -20, 1, -180)
-        stackLabel.Position = UDim2.new(0, 10, 0, 170)
-        stackLabel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        stackLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-        stackLabel.TextSize = 12
-        stackLabel.Font = Enum.Font.Roboto
-        stackLabel.Text = stackTrace or "No stack trace"
-        stackLabel.TextWrapped = true
-        stackLabel.TextXAlignment = Enum.TextXAlignment.Left
-        stackLabel.TextYAlignment = Enum.TextYAlignment.Top
-        stackLabel.ClipsDescendants = true
-        stackLabel.Parent = bg
-        
-        local closeBtn = Instance.new("TextButton")
-        closeBtn.Name = "CloseBtn"
-        closeBtn.Size = UDim2.new(1, 0, 0, 40)
-        closeBtn.Position = UDim2.new(0, 0, 1, -40)
-        closeBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
-        closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        closeBtn.TextSize = 16
-        closeBtn.Font = Enum.Font.GothamBold
-        closeBtn.Text = "Close"
-        closeBtn.BorderSizePixel = 0
-        closeBtn.Parent = bg
-        closeBtn.MouseButton1Click:Connect(function()
-            errorGui:Destroy()
-        end)
-    end)
-end
-
--- ══════════════════════════════════════════════
 --  SERVICES
 -- ══════════════════════════════════════════════
 local playersService    = game:GetService("Players")
@@ -1768,26 +1690,16 @@ end)
 --  HITBOX AUTO BLOCK
 -- ══════════════════════════════════════════════
 local function hitboxAutoBlockCheck(part)
-    local ok, err = pcall(function()
-        if not hitboxAutoBlockEnabled then return end
-        if not isBlockReady() then return end
-        local myRoot = getRootPart()
-        if not myRoot then return end
-        
-        -- Check if hitbox part size matches configured values (with tolerance)
-        local partSize = part.Size
-        local tolerance = 0.3
-        local sizeMatch = (math.abs(partSize.X - hitboxAutoBlockSizeX) <= tolerance and
-                           math.abs(partSize.Y - hitboxAutoBlockSizeY) <= tolerance and
-                           math.abs(partSize.Z - hitboxAutoBlockSizeZ) <= tolerance)
-        
-        if not sizeMatch then return end
-        
-        -- Check if part is within detection range
-        local distSq = (part.Position - myRoot.Position).Magnitude ^ 2
-        if distSq > guestDetectionRangeSq then return end
-        
-        -- Fire block with delay
+    if not hitboxAutoBlockEnabled then return end
+    if not isBlockReady() then return end
+    local myRoot = getRootPart()
+    if not myRoot then return end
+    -- Check if player is inside the hitbox part (with configurable size override)
+    local rel  = part.CFrame:PointToObjectSpace(myRoot.Position)
+    local halfX = hitboxAutoBlockSizeX * 0.5
+    local halfY = hitboxAutoBlockSizeY * 0.5
+    local halfZ = hitboxAutoBlockSizeZ * 0.5
+    if math.abs(rel.X) <= halfX and math.abs(rel.Y) <= halfY and math.abs(rel.Z) <= halfZ then
         task.delay(hitboxAutoBlockDelay, function()
             if not hitboxAutoBlockEnabled then return end
             if not isBlockReady() then return end
@@ -1797,11 +1709,6 @@ local function hitboxAutoBlockCheck(part)
             end
             showCinematicText()
         end)
-    end)
-    
-    if not ok then
-        warn("[Hitbox Auto Block Error] " .. tostring(err))
-        showErrorScreen("Hitbox Auto Block Error", tostring(err), debug.traceback())
     end
 end
 
@@ -1922,22 +1829,20 @@ HDTSection:Toggle({ Title="Show HDT Range", Type="Checkbox", Default=guestShowHD
 -- Hitbox Auto Block
 local HitboxABSection = SentinelTab:Section({ Title = "Hitbox Auto Block", Opened = false })
 HitboxABSection:Paragraph({ Title="Info",
-    Content="Automatically fires Block when a hitbox spawns matching your configured size and within detection range." })
+    Content="Automatically fires Block the moment a hitbox part spawns inside Workspace.Hitboxes and your character is within it. Size sliders let you expand/shrink the detection volume." })
 HitboxABSection:Toggle({ Title="Enable Hitbox Auto Block", Type="Checkbox", Default=hitboxAutoBlockEnabled,
     Callback=function(v)
         hitboxAutoBlockEnabled=v; cfg.set("hitboxAutoBlockEnabled",v)
         if v then startHitboxAutoBlock() else stopHitboxAutoBlock() end
     end })
-HitboxABSection:Slider({ Title="Target Hitbox Size X", Step=0.1, Value={Min=0.5,Max=20,Default=hitboxAutoBlockSizeX},
+HitboxABSection:Slider({ Title="Hitbox Size X", Step=0.5, Value={Min=0.5,Max=20,Default=hitboxAutoBlockSizeX},
     Callback=function(v) hitboxAutoBlockSizeX=v; cfg.set("hitboxAutoBlockSizeX",v) end })
-HitboxABSection:Slider({ Title="Target Hitbox Size Y", Step=0.1, Value={Min=0.5,Max=20,Default=hitboxAutoBlockSizeY},
+HitboxABSection:Slider({ Title="Hitbox Size Y", Step=0.5, Value={Min=0.5,Max=20,Default=hitboxAutoBlockSizeY},
     Callback=function(v) hitboxAutoBlockSizeY=v; cfg.set("hitboxAutoBlockSizeY",v) end })
-HitboxABSection:Slider({ Title="Target Hitbox Size Z", Step=0.1, Value={Min=0.5,Max=20,Default=hitboxAutoBlockSizeZ},
+HitboxABSection:Slider({ Title="Hitbox Size Z", Step=0.5, Value={Min=0.5,Max=20,Default=hitboxAutoBlockSizeZ},
     Callback=function(v) hitboxAutoBlockSizeZ=v; cfg.set("hitboxAutoBlockSizeZ",v) end })
 HitboxABSection:Slider({ Title="Block Delay (s)", Step=0.01, Value={Min=0,Max=0.5,Default=hitboxAutoBlockDelay},
     Callback=function(v) hitboxAutoBlockDelay=v; cfg.set("hitboxAutoBlockDelay",v) end })
-HitboxABSection:Paragraph({ Title="Detection Range",
-    Content="Uses the Auto Block Radius setting from Core Block section. Adjust that to control how far away hitboxes are detected." })
 
 -- Better Detection
 local BetterSection = SentinelTab:Section({ Title = "Better Detection", Opened = false })
@@ -2098,24 +2003,3 @@ InterfaceTab:Button({ Title="Close UI", Locked=false,
     end })
 
 print("V1rpBlock loaded")
-
--- ══════════════════════════════════════════════
---  GLOBAL ERROR HANDLER
--- ══════════════════════════════════════════════
-game:GetService("ScriptContext").Error:Connect(function(message)
-    if string.find(message, "V1rpBlock") or string.find(message, "Hitbox") then
-        warn("[V1rpBlock Error] " .. message)
-        showErrorScreen("V1rpBlock Error", message, "Check console for details")
-    end
-end)
-
--- Catch any runtime errors
-task.spawn(function()
-    while true do
-        task.wait(1)
-        if hitboxAutoBlockEnabled and not hitboxAutoBlockConn then
-            warn("[V1rpBlock] Hitbox Auto Block connection lost, reconnecting...")
-            task.delay(0.5, startHitboxAutoBlock)
-        end
-    end
-end)
