@@ -5459,10 +5459,10 @@ print("[Guest Core] Loaded")
 end -- tabGuestCore
 
 -- ============================================================
--- GUEST 1337 - HDT TAB
+-- GUEST 1337 - HDT TAB (COMPLETE REWORK)
 -- ============================================================
 
-do -- tabGuestHDT
+do -- tabGuestHDT - COMPLETE REWORK
 local tabGuestHDT = win:Tab({ Title = "Guest HDT", Icon = "target" })
 
 -- Load config
@@ -5480,18 +5480,15 @@ pcall(function()
     end
 end)
 
+-- HDT Settings
 guestCfg.hdtEnabled = guestCfg.hdtEnabled or false
-guestCfg.hdtMode = guestCfg.hdtMode or "Blatant"
-guestCfg.hdtBlatantSpeed = guestCfg.hdtBlatantSpeed or 150
-guestCfg.hdtLegitSpeed = guestCfg.hdtLegitSpeed or 140
-guestCfg.hdtPredictTime = guestCfg.hdtPredictTime or 0.12
-guestCfg.hdtFaceKiller = guestCfg.hdtFaceKiller or false
-guestCfg.hdtVisual = guestCfg.hdtVisual or false
-guestCfg.hdtDragDuration = guestCfg.hdtDragDuration or 1.0
-guestCfg.hdtTriggerRadius = guestCfg.hdtTriggerRadius or 15
-guestCfg.hdtTargetMode = guestCfg.hdtTargetMode or "Root"
-guestCfg.hdtSwitchDist = guestCfg.hdtSwitchDist or 8
-guestCfg.showHDTRange = guestCfg.showHDTRange or false
+guestCfg.hdtSpeed = guestCfg.hdtSpeed or 180
+guestCfg.hdtDuration = guestCfg.hdtDuration or 0.8
+guestCfg.hdtRange = guestCfg.hdtRange or 30
+guestCfg.hdtFaceKiller = guestCfg.hdtFaceKiller or true
+guestCfg.hdtPredict = guestCfg.hdtPredict or 0.15
+guestCfg.hdtShowRange = guestCfg.hdtShowRange or false
+guestCfg.hdtPullStrength = guestCfg.hdtPullStrength or 1.0
 
 local function saveCfg()
     pcall(function()
@@ -5501,45 +5498,33 @@ local function saveCfg()
 end
 
 -- HDT STATE
-local hdt = { rangePart = nil, killerState = {} }
+local hdt = {
+    active = false,
+    target = nil,
+    targetHRP = nil,
+    connection = nil,
+    rangePart = nil,
+    killerState = {},
+    origWalkSpeed = nil,
+    origJumpPower = nil,
+    origAutoRotate = nil,
+    blockRemote = nil,
+}
 
-local function hdt_getRoot() local c=lp.Character; return c and c:FindFirstChild("HumanoidRootPart") end
-local function hdt_getHum() local c=lp.Character; return c and c:FindFirstChild("Humanoid") end
-local function hdt_getTeam(n) local r=svc.WS:FindFirstChild("Players"); return r and r:FindFirstChild(n) end
-
-local function hdt_getQueryHitbox(m)
-    if not m then return nil end
-    local q = m:FindFirstChild("QueryHitbox")
-    if q and q:IsA("BasePart") then return q end
-    for _, c in ipairs(m:GetChildren()) do
-        local n = c:FindFirstChild("QueryHitbox")
-        if n and n:IsA("BasePart") then return n end
-    end
-    return nil
+-- UTILITY FUNCTIONS
+local function hdt_getRoot()
+    local c = lp.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function hdt_findHitboxPart(m)
-    local gh = svc.WS:FindFirstChild("Hitboxes")
-    if gh then
-        local best, bv = nil, 0
-        for _, c in ipairs(gh:GetChildren()) do
-            if c:IsA("BasePart") then
-                local v = c.Size.X * c.Size.Y * c.Size.Z
-                if v > bv then bv = v; best = c end
-            end
-        end
-        if best then return best end
-    end
-    local hf = m:FindFirstChild("Hitboxes")
-    if hf then
-        for _, c in ipairs(hf:GetChildren()) do
-            if c:IsA("BasePart") then return c end
-        end
-    end
-    for _, c in ipairs(m:GetDescendants()) do
-        if c:IsA("BasePart") and c.Name:lower():find("hitbox") then return c end
-    end
-    return nil
+local function hdt_getHum()
+    local c = lp.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function hdt_getTeam(name)
+    local r = svc.WS:FindFirstChild("Players")
+    return r and r:FindFirstChild(name)
 end
 
 local function hdt_isBlockReady()
@@ -5567,242 +5552,304 @@ local function hdt_isBlockReady()
     return true
 end
 
-local function hdt_performDrag(killer)
-    if not guestCfg.hdtEnabled or not killer then return end
-    if not hdt_isBlockReady() then
-        task.spawn(function()
-            local w = 0
-            while not hdt_isBlockReady() and w < 30 do task.wait(0.1); w = w + 0.1 end
-            if hdt_isBlockReady() and guestCfg.hdtEnabled and killer.Parent then
-                hdt_performDrag(killer)
-            end
-        end)
-        return
-    end
+-- Find the best killer target
+local function hdt_findTarget()
+    local root = hdt_getRoot()
+    if not root then return nil, nil end
     
-    local mode = guestCfg.hdtMode
-    local face = guestCfg.hdtFaceKiller
-    local visual = guestCfg.hdtVisual
-    local targetMode = guestCfg.hdtTargetMode
-    local duration = guestCfg.hdtDragDuration
+    local kf = hdt_getTeam("Killers")
+    if not kf then return nil, nil end
     
-    local targetPart
-    if mode == "Hitbox" then
-        targetPart = hdt_findHitboxPart(killer)
-        if not targetPart then mode = "Blatant" end
-    end
+    local best, bestDist = nil, math.huge
+    local myPos = root.Position
     
-    if not targetPart then
-        if targetMode == "Arms" or targetMode == "Random" then
-            local armNames = {"Right Arm","Left Arm","RightHand","LeftHand","RightUpperArm","LeftUpperArm"}
-            local arms = {}
-            for _, n in ipairs(armNames) do
-                local a = killer:FindFirstChild(n)
-                if a and a:IsA("BasePart") then table.insert(arms, a) end
-            end
-            if #arms > 0 then
-                if targetMode == "Arms" then
-                    targetPart = arms[1]
-                else
-                    local root = killer:FindFirstChild("HumanoidRootPart") or killer:FindFirstChild("Torso")
-                    targetPart = (math.random() < 0.5) and root or arms[math.random(#arms)]
+    for _, killer in ipairs(kf:GetChildren()) do
+        if killer ~= lp.Character then
+            local hrp = killer:FindFirstChild("HumanoidRootPart")
+            local hum = killer:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local dist = (hrp.Position - myPos).Magnitude
+                if dist < bestDist and dist <= guestCfg.hdtRange then
+                    bestDist = dist
+                    best = killer
                 end
             end
         end
-        if not targetPart then
-            targetPart = killer:FindFirstChild("HumanoidRootPart") or killer:FindFirstChild("Torso")
-        end
-        if not targetPart then
-            for _, c in ipairs(killer:GetDescendants()) do
-                if c:IsA("BasePart") then targetPart = c; break end
-            end
-        end
-    end
-    if not targetPart then return end
-    
-    local char = lp.Character
-    local hum = char and char:FindFirstChild("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not hum or not root then return end
-    
-    local resolved = mode
-    if resolved == "Smart" then
-        local dist = (targetPart.Position - root.Position).Magnitude
-        resolved = (dist <= guestCfg.hdtSwitchDist) and "Legit" or "Blatant"
     end
     
-    local origWS = hum.WalkSpeed
-    local origAR = hum.AutoRotate
-    
-    local beam
-    local function makeBeam()
-        if not visual then return end
-        beam = Instance.new("Part")
-        beam.Size = Vector3.new(0.3,0.3,1)
-        beam.Anchored = true; beam.CanCollide = false
-        beam.Material = Enum.Material.Neon
-        beam.Transparency = 0.3; beam.Color = Color3.fromRGB(255,215,0)
-        beam.Parent = svc.WS
-        svc.Debris:AddItem(beam, duration + 0.15)
+    if best then
+        local hrp = best:FindFirstChild("HumanoidRootPart")
+        return best, hrp
     end
-    
-    local function updateBeam()
-        if not beam or not beam.Parent then return end
-        if not root or not root.Parent or not targetPart.Parent then return end
-        local p1, p2 = root.Position, targetPart.Position
-        local mid = (p1 + p2) * 0.5
-        local dist = (p2 - p1).Magnitude
-        beam.Size = Vector3.new(0.3,0.3,dist)
-        beam.CFrame = CFrame.new(mid, p2)
-    end
-    
-    local startTime = tick()
-    
-    if resolved == "Legit" then
-        hum.AutoRotate = false
-        hum.WalkSpeed = guestCfg.hdtLegitSpeed
-        makeBeam()
-        
-        local conn
-        conn = svc.Run.Heartbeat:Connect(function()
-            local elapsed = tick() - startTime
-            if elapsed >= duration or not guestCfg.hdtEnabled or not targetPart.Parent or not hum.Parent then
-                conn:Disconnect()
-                hum.WalkSpeed = origWS
-                hum.AutoRotate = origAR
-                return
-            end
-            local s = hdt.killerState[killer]
-            local pv = s and s.vel or Vector3.zero
-            local pp = targetPart.Position + pv * guestCfg.hdtPredictTime
-            if (pp - root.Position).Magnitude > 0.1 then hum:MoveTo(pp) end
-            if face then
-                local d = targetPart.Position - root.Position
-                if d.Magnitude > 0.1 then
-                    root.CFrame = root.CFrame:Lerp(CFrame.new(root.Position, root.Position + d.Unit), 0.35)
-                end
-            end
-            updateBeam()
-        end)
-    else
-        hum.WalkSpeed = 0
-        hum.AutoRotate = false
-        makeBeam()
-        
-        local conn
-        conn = svc.Run.Heartbeat:Connect(function()
-            local elapsed = tick() - startTime
-            if elapsed >= duration or not guestCfg.hdtEnabled or not targetPart.Parent or not hum.Parent or not root.Parent then
-                conn:Disconnect()
-                root.AssemblyLinearVelocity = Vector3.zero
-                hum.WalkSpeed = origWS
-                hum.AutoRotate = origAR
-                return
-            end
-            local s = hdt.killerState[killer]
-            local pv = s and s.vel or Vector3.zero
-            local pp = targetPart.Position + pv * guestCfg.hdtPredictTime
-            local d = pp - root.Position
-            if d.Magnitude > 0.1 then
-                local dist = d.Magnitude
-                local speed = math.min(guestCfg.hdtBlatantSpeed, dist * 12)
-                local cur = root.AssemblyLinearVelocity
-                local desired = d.Unit * speed
-                root.AssemblyLinearVelocity = Vector3.new(desired.X, cur.Y, desired.Z)
-            else
-                root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
-            end
-            if face then
-                local fd = targetPart.Position - root.Position
-                if fd.Magnitude > 0.1 then
-                    root.CFrame = root.CFrame:Lerp(CFrame.new(root.Position, root.Position + fd.Unit), 0.4)
-                end
-            end
-            updateBeam()
-        end)
-    end
+    return nil, nil
 end
 
--- Track killer velocity for HDT
+-- Track killer velocity for prediction
 svc.Run.RenderStepped:Connect(function(dt)
-    for k in pairs(hdt.killerState) do if not k.Parent then hdt.killerState[k] = nil end end
+    for k in pairs(hdt.killerState) do
+        if not k.Parent then hdt.killerState[k] = nil end
+    end
+    
     local kf = hdt_getTeam("Killers")
     if not kf then return end
+    
     for _, killer in ipairs(kf:GetChildren()) do
         local hrp = killer:FindFirstChild("HumanoidRootPart")
         if hrp then
-            local s = hdt.killerState[killer] or {prevPos=hrp.Position, vel=Vector3.new()}
-            local nv = (hrp.Position - s.prevPos) / math.max(dt, 1e-6)
-            s.vel = s.vel:Lerp(nv, 0.22)
-            s.prevPos = hrp.Position
-            hdt.killerState[killer] = s
+            local state = hdt.killerState[killer] or {
+                prevPos = hrp.Position,
+                velocity = Vector3.new(),
+                smoothVel = Vector3.new()
+            }
+            
+            local vel = (hrp.Position - state.prevPos) / math.max(dt, 0.001)
+            state.velocity = vel
+            state.smoothVel = state.smoothVel:Lerp(vel, 0.25)
+            state.prevPos = hrp.Position
+            hdt.killerState[killer] = state
         end
     end
 end)
 
--- Hook remote for HDT trigger
-local function hdt_setupHook()
-    local remote = nil
-    pcall(function()
-        remote = svc.RS:WaitForChild("Modules",10):WaitForChild("Network",10):WaitForChild("Network",10):WaitForChild("RemoteEvent",10)
-    end)
-    if not remote then return end
-    
-    remote.OnClientEvent:Connect(function(action, data)
-        if not guestCfg.hdtEnabled or action ~= "UseActorAbility" then return end
-        if typeof(data) ~= "table" or not data[1] then return end
-        
-        local name = ""
-        pcall(function() name = buffer.tostring(data[1]) end)
-        if not name or not name:find("Punch") then return end
-        
-        local root = hdt_getRoot()
-        if not root then return end
-        
-        local kf = hdt_getTeam("Killers")
-        if not kf then return end
-        
-        local best, bd = nil, math.huge
-        for _, killer in ipairs(kf:GetChildren()) do
-            local hrp = killer:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local d = (hrp.Position - root.Position).Magnitude
-                if d < bd and d <= guestCfg.hdtTriggerRadius then
-                    bd = d; best = killer
-                end
-            end
-        end
-        
-        if best then task.spawn(hdt_performDrag, best) end
-    end)
-end
-
-task.spawn(hdt_setupHook)
-
--- Range visual
+-- Range visualization
 local function hdt_updateRange()
-    if not guestCfg.showHDTRange then
-        if hdt.rangePart then hdt.rangePart:Destroy(); hdt.rangePart = nil end
+    if not guestCfg.hdtShowRange then
+        if hdt.rangePart then
+            hdt.rangePart:Destroy()
+            hdt.rangePart = nil
+        end
         return
     end
+    
     local root = hdt_getRoot()
     if not root then return end
+    
     if not hdt.rangePart then
         hdt.rangePart = Instance.new("Part")
+        hdt.rangePart.Name = "HDTRange"
         hdt.rangePart.Anchored = true
         hdt.rangePart.CanCollide = false
         hdt.rangePart.Shape = Enum.PartType.Ball
-        hdt.rangePart.Transparency = 0.5
-        hdt.rangePart.Color = Color3.fromRGB(255,255,0)
+        hdt.rangePart.Transparency = 0.6
+        hdt.rangePart.Color = Color3.fromRGB(0, 255, 100)
         hdt.rangePart.Material = Enum.Material.ForceField
         hdt.rangePart.Parent = svc.WS
     end
-    local r = guestCfg.hdtTriggerRadius
-    hdt.rangePart.Size = Vector3.new(r*2, r*2, r*2)
+    
+    local r = guestCfg.hdtRange
+    hdt.rangePart.Size = Vector3.new(r * 2, r * 2, r * 2)
     hdt.rangePart.CFrame = CFrame.new(root.Position)
 end
 
 svc.Run.RenderStepped:Connect(hdt_updateRange)
+
+-- MAIN HDT EXECUTION
+local function hdt_execute(killer, killerHRP)
+    if hdt.active then return end
+    if not killer or not killerHRP or not killerHRP.Parent then return end
+    
+    -- Check block cooldown
+    if not hdt_isBlockReady() then
+        print("[HDT] ⏳ Block on cooldown, waiting...")
+        local waited = 0
+        while not hdt_isBlockReady() and waited < 0.5 do
+            task.wait(0.05)
+            waited = waited + 0.05
+        end
+        if not hdt_isBlockReady() then
+            print("[HDT] ❌ Block still on cooldown, aborting")
+            return
+        end
+    end
+    
+    local char = lp.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return end
+    
+    print("[HDT] 🚀 Starting HDT on:", killer.Name)
+    hdt.active = true
+    hdt.target = killer
+    hdt.targetHRP = killerHRP
+    
+    -- Save original values
+    hdt.origWalkSpeed = hum.WalkSpeed
+    hdt.origJumpPower = hum.JumpPower
+    hdt.origAutoRotate = hum.AutoRotate
+    
+    -- Disable jump and set speed
+    hum.JumpPower = 0
+    hum.WalkSpeed = 0
+    hum.AutoRotate = false
+    
+    -- Create BodyVelocity for smooth pulling
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(4000, 0, 4000)
+    bv.Velocity = Vector3.zero
+    bv.Parent = root
+    
+    local startTime = tick()
+    local duration = guestCfg.hdtDuration
+    
+    -- Main HDT loop
+    hdt.connection = svc.Run.Heartbeat:Connect(function(dt)
+        local elapsed = tick() - startTime
+        
+        -- Stop conditions
+        if elapsed >= duration or 
+           not guestCfg.hdtEnabled or 
+           not hdt.active or
+           not killer.Parent or
+           not killerHRP.Parent or
+           not root.Parent or
+           not hum.Parent then
+            hdt.cleanup()
+            return
+        end
+        
+        -- Get killer state for prediction
+        local state = hdt.killerState[killer]
+        local vel = state and state.smoothVel or Vector3.zero
+        
+        -- Predict target position
+        local targetPos = killerHRP.Position + vel * guestCfg.hdtPredict
+        
+        -- Calculate direction to target
+        local dir = (targetPos - root.Position)
+        local dist = dir.Magnitude
+        
+        if dist > 0.5 then
+            -- Pull toward target using BodyVelocity
+            local strength = math.min(guestCfg.hdtSpeed * guestCfg.hdtPullStrength, dist * 20)
+            local pullDir = dir.Unit * strength
+            bv.Velocity = Vector3.new(pullDir.X, root.AssemblyLinearVelocity.Y * 0.5, pullDir.Z)
+            
+            -- Face the killer if enabled
+            if guestCfg.hdtFaceKiller then
+                local faceDir = Vector3.new(
+                    killerHRP.Position.X - root.Position.X,
+                    0,
+                    killerHRP.Position.Z - root.Position.Z
+                )
+                if faceDir.Magnitude > 0.1 then
+                    faceDir = faceDir.Unit
+                    local targetCF = CFrame.new(root.Position, root.Position + faceDir)
+                    root.CFrame = root.CFrame:Lerp(targetCF, 0.3)
+                end
+            end
+        else
+            -- Close enough, just face them
+            bv.Velocity = Vector3.new(0, root.AssemblyLinearVelocity.Y * 0.5, 0)
+            if guestCfg.hdtFaceKiller then
+                local faceDir = Vector3.new(
+                    killerHRP.Position.X - root.Position.X,
+                    0,
+                    killerHRP.Position.Z - root.Position.Z
+                )
+                if faceDir.Magnitude > 0.1 then
+                    faceDir = faceDir.Unit
+                    root.CFrame = CFrame.new(root.Position, root.Position + faceDir)
+                end
+            end
+        end
+    end)
+end
+
+-- Cleanup function
+function hdt.cleanup()
+    if hdt.connection then
+        hdt.connection:Disconnect()
+        hdt.connection = nil
+    end
+    
+    local char = lp.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        
+        -- Remove BodyVelocity
+        if root then
+            local bv = root:FindFirstChildWhichIsA("BodyVelocity")
+            if bv then bv:Destroy() end
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+        
+        -- Restore values
+        if hum then
+            if hdt.origWalkSpeed then
+                hum.WalkSpeed = hdt.origWalkSpeed
+            end
+            if hdt.origJumpPower then
+                hum.JumpPower = hdt.origJumpPower
+            end
+            if hdt.origAutoRotate ~= nil then
+                hum.AutoRotate = hdt.origAutoRotate
+            end
+        end
+    end
+    
+    hdt.active = false
+    hdt.target = nil
+    hdt.targetHRP = nil
+    hdt.origWalkSpeed = nil
+    hdt.origJumpPower = nil
+    hdt.origAutoRotate = nil
+    
+    print("[HDT] 🛑 HDT stopped")
+end
+
+-- HOOK INTO BLOCK (supports both manual and auto block)
+local function hdt_setupBlockHook()
+    local remote = nil
+    pcall(function()
+        remote = svc.RS:WaitForChild("Modules",10):WaitForChild("Network",10):WaitForChild("Network",10):WaitForChild("RemoteEvent",10)
+    end)
+    if not remote then
+        print("[HDT] ❌ Could not find RemoteEvent")
+        return
+    end
+    
+    hdt.blockRemote = remote
+    
+    remote.OnClientEvent:Connect(function(action, data)
+        if not guestCfg.hdtEnabled then return end
+        if action ~= "UseActorAbility" then return end
+        if typeof(data) ~= "table" or not data[1] then return end
+        
+        local abilityName = ""
+        pcall(function()
+            if type(data[1]) == "buffer" then
+                abilityName = buffer.tostring(data[1])
+            end
+        end)
+        
+        -- Trigger on BLOCK (both manual and auto)
+        if abilityName:find("Block") then
+            print("[HDT] 🛡️ Block detected! (Auto or manual)")
+            
+            -- Small delay to let the block register properly
+            task.wait(0.05)
+            
+            -- Find nearest killer
+            local killer, killerHRP = hdt_findTarget()
+            if killer and killerHRP then
+                print("[HDT] 🎯 Found target:", killer.Name)
+                task.spawn(hdt_execute, killer, killerHRP)
+            else
+                print("[HDT] ❌ No killers within range")
+            end
+        end
+    end)
+end
+
+-- Handle character respawn
+lp.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if hdt.active then hdt.cleanup() end
+end)
+
+-- Initialize
+task.spawn(hdt_setupBlockHook)
 
 -- ============================================================
 -- UI - HDT
@@ -5810,55 +5857,169 @@ svc.Run.RenderStepped:Connect(hdt_updateRange)
 
 local secHDT = tabGuestHDT:Section({ Title = "Hitbox Dragging (HDT)", Opened = true })
 
-secHDT:Toggle({ Title="Enable HDT", Type="Checkbox", Default=guestCfg.hdtEnabled,
-    Callback=function(v) guestCfg.hdtEnabled=v; saveCfg() end })
+secHDT:Toggle({
+    Title = "Enable HDT",
+    Description = "Pulls you into the killer when you block",
+    Type = "Checkbox",
+    Default = guestCfg.hdtEnabled,
+    Callback = function(v)
+        guestCfg.hdtEnabled = v
+        saveCfg()
+        if not v and hdt.active then hdt.cleanup() end
+    end
+})
 
-secHDT:Dropdown({ Title="HDT Mode", Values={"Blatant","Legit","Hitbox","Smart"}, Value=guestCfg.hdtMode,
-    Callback=function(v) guestCfg.hdtMode=v; saveCfg() end })
+secHDT:Slider({
+    Title = "Pull Speed",
+    Description = "How fast you get pulled (higher = faster)",
+    Step = 5,
+    Value = { Min = 50, Max = 350, Default = guestCfg.hdtSpeed },
+    Callback = function(v)
+        guestCfg.hdtSpeed = v
+        saveCfg()
+    end
+})
 
-secHDT:Paragraph({ Title="Smart Mode", Content="Smart auto-switches between Legit (close) and Blatant (far) based on Switch Distance." })
+secHDT:Slider({
+    Title = "Pull Duration (s)",
+    Description = "How long the pull lasts",
+    Step = 0.05,
+    Value = { Min = 0.2, Max = 2.0, Default = guestCfg.hdtDuration },
+    Callback = function(v)
+        guestCfg.hdtDuration = v
+        saveCfg()
+    end
+})
 
-secHDT:Slider({ Title="Switch Distance (Smart)", Step=1, Value={Min=2,Max=20,Default=guestCfg.hdtSwitchDist},
-    Callback=function(v) guestCfg.hdtSwitchDist=v; saveCfg() end })
+secHDT:Slider({
+    Title = "Detection Range",
+    Description = "How far to look for killers",
+    Step = 1,
+    Value = { Min = 5, Max = 60, Default = guestCfg.hdtRange },
+    Callback = function(v)
+        guestCfg.hdtRange = v
+        saveCfg()
+    end
+})
 
-secHDT:Slider({ Title="Blatant Speed", Step=1, Value={Min=1,Max=300,Default=guestCfg.hdtBlatantSpeed},
-    Callback=function(v) guestCfg.hdtBlatantSpeed=v; saveCfg() end })
+secHDT:Slider({
+    Title = "Prediction (s)",
+    Description = "Predict where the killer will be",
+    Step = 0.01,
+    Value = { Min = 0, Max = 0.5, Default = guestCfg.hdtPredict },
+    Callback = function(v)
+        guestCfg.hdtPredict = v
+        saveCfg()
+    end
+})
 
-secHDT:Slider({ Title="Legit Speed", Step=1, Value={Min=10,Max=200,Default=guestCfg.hdtLegitSpeed},
-    Callback=function(v) guestCfg.hdtLegitSpeed=v; saveCfg() end })
+secHDT:Slider({
+    Title = "Pull Strength",
+    Description = "Multiplier for pull force",
+    Step = 0.05,
+    Value = { Min = 0.5, Max = 2.0, Default = guestCfg.hdtPullStrength },
+    Callback = function(v)
+        guestCfg.hdtPullStrength = v
+        saveCfg()
+    end
+})
 
-secHDT:Slider({ Title="Prediction Time (s)", Step=0.01, Value={Min=0,Max=0.5,Default=guestCfg.hdtPredictTime},
-    Callback=function(v) guestCfg.hdtPredictTime=v; saveCfg() end })
+secHDT:Toggle({
+    Title = "Face Killer",
+    Description = "Automatically face the killer while pulling",
+    Type = "Checkbox",
+    Default = guestCfg.hdtFaceKiller,
+    Callback = function(v)
+        guestCfg.hdtFaceKiller = v
+        saveCfg()
+    end
+})
 
-secHDT:Toggle({ Title="Face Killer During HDT", Type="Checkbox", Default=guestCfg.hdtFaceKiller,
-    Callback=function(v) guestCfg.hdtFaceKiller=v; saveCfg() end })
+secHDT:Toggle({
+    Title = "Show Detection Range",
+    Description = "Visual indicator of your HDT range",
+    Type = "Checkbox",
+    Default = guestCfg.hdtShowRange,
+    Callback = function(v)
+        guestCfg.hdtShowRange = v
+        saveCfg()
+        if not v and hdt.rangePart then
+            hdt.rangePart:Destroy()
+            hdt.rangePart = nil
+        end
+    end
+})
 
-secHDT:Toggle({ Title="HDT Visual (Beam)", Type="Checkbox", Default=guestCfg.hdtVisual,
-    Callback=function(v) guestCfg.hdtVisual=v; saveCfg() end })
+-- Test Button
+secHDT:Button({
+    Title = "🧪 Test HDT (Force Pull)",
+    Callback = function()
+        if not guestCfg.hdtEnabled then
+            ui:Notify({
+                Title = "HDT Disabled",
+                Content = "Enable HDT first!",
+                Duration = 2
+            })
+            return
+        end
+        
+        local killer, killerHRP = hdt_findTarget()
+        if killer and killerHRP then
+            print("[HDT] 🧪 Force pulling to:", killer.Name)
+            task.spawn(hdt_execute, killer, killerHRP)
+            ui:Notify({
+                Title = "HDT Test",
+                Content = "Pulling to " .. killer.Name,
+                Duration = 2
+            })
+        else
+            print("[HDT] ❌ No killers within range")
+            ui:Notify({
+                Title = "No Target",
+                Content = "No killers within " .. guestCfg.hdtRange .. " studs",
+                Duration = 2
+            })
+        end
+    end
+})
 
-secHDT:Slider({ Title="Drag Duration", Step=0.05, Value={Min=0.05,Max=2,Default=guestCfg.hdtDragDuration},
-    Callback=function(v) guestCfg.hdtDragDuration=v; saveCfg() end })
+-- Stop Button
+secHDT:Button({
+    Title = "⏹️ Stop HDT",
+    Callback = function()
+        if hdt.active then
+            hdt.cleanup()
+            ui:Notify({
+                Title = "HDT Stopped",
+                Content = "Pull canceled",
+                Duration = 1
+            })
+        end
+    end
+})
 
-secHDT:Slider({ Title="Trigger Radius", Step=1, Value={Min=0,Max=30,Default=guestCfg.hdtTriggerRadius},
-    Callback=function(v) guestCfg.hdtTriggerRadius=v; saveCfg() end })
-
-secHDT:Dropdown({ Title="Target Mode", Values={"Root","Arms","Random"}, Value=guestCfg.hdtTargetMode,
-    Callback=function(v) guestCfg.hdtTargetMode=v; saveCfg() end })
-
-secHDT:Toggle({ Title="Show HDT Range", Type="Checkbox", Default=guestCfg.showHDTRange,
-    Callback=function(v) guestCfg.showHDTRange=v; saveCfg() end })
-
-secHDT:Button({ Title="Unload HDT", Callback=function()
-    pcall(function()
+-- Unload
+secHDT:Button({
+    Title = "Unload HDT",
+    Callback = function()
         guestCfg.hdtEnabled = false
-        if hdt.rangePart then hdt.rangePart:Destroy(); hdt.rangePart = nil end
+        if hdt.active then hdt.cleanup() end
+        if hdt.rangePart then
+            hdt.rangePart:Destroy()
+            hdt.rangePart = nil
+        end
         hdt.killerState = {}
-    end)
-    tabGuestHDT:Destroy()
-    ui:Notify({Title="HDT Unloaded", Content="HDT features disabled", Duration=2})
-end })
+        saveCfg()
+        tabGuestHDT:Destroy()
+        ui:Notify({
+            Title = "HDT Unloaded",
+            Content = "All features disabled",
+            Duration = 2
+        })
+    end
+})
 
-print("[Guest HDT] Loaded")
+print("[Guest HDT] ✅ Loaded successfully")
 
 end -- tabGuestHDT
 
