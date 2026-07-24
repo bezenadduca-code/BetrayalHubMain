@@ -5459,10 +5459,10 @@ print("[Guest Core] Loaded")
 end -- tabGuestCore
 
 -- ============================================================
--- GUEST 1337 - HDT TAB (COMPLETE REWORK)
+-- GUEST 1337 - HDT TAB (WORKING IMPLEMENTATION)
 -- ============================================================
 
-do -- tabGuestHDT - COMPLETE REWORK
+do -- tabGuestHDT
 local tabGuestHDT = win:Tab({ Title = "Guest HDT", Icon = "target" })
 
 -- Load config
@@ -5482,13 +5482,12 @@ end)
 
 -- HDT Settings
 guestCfg.hdtEnabled = guestCfg.hdtEnabled or false
-guestCfg.hdtSpeed = guestCfg.hdtSpeed or 180
-guestCfg.hdtDuration = guestCfg.hdtDuration or 0.8
-guestCfg.hdtRange = guestCfg.hdtRange or 30
-guestCfg.hdtFaceKiller = guestCfg.hdtFaceKiller or true
-guestCfg.hdtPredict = guestCfg.hdtPredict or 0.15
+guestCfg.hdtSpeed = guestCfg.hdtSpeed or 5.6
+guestCfg.hdtDuration = guestCfg.hdtDuration or 1.4
+guestCfg.hdtRange = guestCfg.hdtRange or 6
+guestCfg.hdtDelay = guestCfg.hdtDelay or 0
 guestCfg.hdtShowRange = guestCfg.hdtShowRange or false
-guestCfg.hdtPullStrength = guestCfg.hdtPullStrength or 1.0
+guestCfg.hdtFaceKiller = guestCfg.hdtFaceKiller or true
 
 local function saveCfg()
     pcall(function()
@@ -5504,11 +5503,19 @@ local hdt = {
     targetHRP = nil,
     connection = nil,
     rangePart = nil,
-    killerState = {},
     origWalkSpeed = nil,
     origJumpPower = nil,
+    origPlatformStand = nil,
     origAutoRotate = nil,
-    blockRemote = nil,
+    debounce = false,
+    animator = nil,
+}
+
+-- BLOCK ANIMATION IDs (from working script)
+local blockAnimIds = {
+    "72722244508749",
+    "96959123077498",
+    "95802026624883"
 }
 
 -- UTILITY FUNCTIONS
@@ -5522,34 +5529,17 @@ local function hdt_getHum()
     return c and c:FindFirstChildOfClass("Humanoid")
 end
 
+local function hdt_getAnimator()
+    local hum = hdt_getHum()
+    if hum then
+        return hum:FindFirstChildOfClass("Animator")
+    end
+    return nil
+end
+
 local function hdt_getTeam(name)
     local r = svc.WS:FindFirstChild("Players")
     return r and r:FindFirstChild(name)
-end
-
-local function hdt_isBlockReady()
-    local ui = lp:FindFirstChild("PlayerGui")
-    if ui then
-        local m = ui:FindFirstChild("MainUI")
-        if m then
-            local ac = m:FindFirstChild("AbilityContainer")
-            if ac then
-                local bl = ac:FindFirstChild("Block")
-                if bl then
-                    local ct = bl:FindFirstChild("CooldownTime")
-                    if ct and ct:IsA("TextLabel") then
-                        local num = ct.Text:match("[%d%.]+")
-                        if num then
-                            local v = tonumber(num)
-                            return not v or v <= 0
-                        end
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    return true
 end
 
 -- Find the best killer target
@@ -5584,32 +5574,241 @@ local function hdt_findTarget()
     return nil, nil
 end
 
--- Track killer velocity for prediction
-svc.Run.RenderStepped:Connect(function(dt)
-    for k in pairs(hdt.killerState) do
-        if not k.Parent then hdt.killerState[k] = nil end
+-- MAIN HDT EXECUTION (using BodyVelocity like the working script)
+local function hdt_execute(killer, killerHRP)
+    if hdt.debounce then return end
+    if not killer or not killerHRP or not killerHRP.Parent then return end
+    
+    local char = lp.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then return end
+    
+    hdt.debounce = true
+    hdt.target = killer
+    hdt.targetHRP = killerHRP
+    
+    print("[HDT] 🚀 Dragging to:", killer.Name)
+    
+    -- Save original values
+    hdt.origWalkSpeed = hum.WalkSpeed
+    hdt.origJumpPower = hum.JumpPower
+    hdt.origPlatformStand = hum.PlatformStand
+    hdt.origAutoRotate = hum.AutoRotate
+    
+    -- Disable movement
+    hum.WalkSpeed = 0
+    hum.JumpPower = 0
+    hum.PlatformStand = false
+    hum.AutoRotate = false
+    
+    -- Create BodyVelocity for smooth pulling (same as working script)
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e5, 0, 1e5)
+    bv.Velocity = Vector3.zero
+    bv.Parent = root
+    
+    local startTime = tick()
+    local duration = guestCfg.hdtDuration
+    local speed = guestCfg.hdtSpeed
+    
+    -- Main HDT loop
+    hdt.connection = svc.Run.Heartbeat:Connect(function(dt)
+        local elapsed = tick() - startTime
+        
+        -- Stop conditions
+        if elapsed >= duration or 
+           not guestCfg.hdtEnabled or 
+           not killer.Parent or
+           not killerHRP.Parent or
+           not root.Parent or
+           not hum.Parent then
+            hdt.cleanup()
+            return
+        end
+        
+        -- Calculate direction to target
+        local toTarget = (killerHRP.Position - root.Position)
+        local dist = toTarget.Magnitude
+        
+        if dist > 1 then
+            -- Pull toward target using BodyVelocity
+            local horiz = Vector3.new(toTarget.X, 0, toTarget.Z)
+            if horiz.Magnitude > 0.01 then
+                local dir = horiz.Unit
+                bv.Velocity = Vector3.new(dir.X * speed, bv.Velocity.Y, dir.Z * speed)
+            end
+            
+            -- Face the killer if enabled
+            if guestCfg.hdtFaceKiller then
+                local faceDir = Vector3.new(
+                    killerHRP.Position.X - root.Position.X,
+                    0,
+                    killerHRP.Position.Z - root.Position.Z
+                )
+                if faceDir.Magnitude > 0.1 then
+                    faceDir = faceDir.Unit
+                    local targetCF = CFrame.new(root.Position, root.Position + faceDir)
+                    root.CFrame = root.CFrame:Lerp(targetCF, 0.5)
+                end
+            end
+        else
+            -- Close enough, stop pulling
+            bv.Velocity = Vector3.new(0, bv.Velocity.Y, 0)
+            if guestCfg.hdtFaceKiller then
+                local faceDir = Vector3.new(
+                    killerHRP.Position.X - root.Position.X,
+                    0,
+                    killerHRP.Position.Z - root.Position.Z
+                )
+                if faceDir.Magnitude > 0.1 then
+                    faceDir = faceDir.Unit
+                    root.CFrame = CFrame.new(root.Position, root.Position + faceDir)
+                end
+            end
+            -- Stop early if very close
+            if dist < 1.5 then
+                hdt.cleanup()
+            end
+        end
+    end)
+    
+    -- Safety timeout (cleanup after duration + 0.5s)
+    task.delay(duration + 0.5, function()
+        if hdt.debounce then
+            hdt.cleanup()
+        end
+    end)
+end
+
+-- Cleanup function
+function hdt.cleanup()
+    if hdt.connection then
+        hdt.connection:Disconnect()
+        hdt.connection = nil
     end
     
-    local kf = hdt_getTeam("Killers")
-    if not kf then return end
-    
-    for _, killer in ipairs(kf:GetChildren()) do
-        local hrp = killer:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local state = hdt.killerState[killer] or {
-                prevPos = hrp.Position,
-                velocity = Vector3.new(),
-                smoothVel = Vector3.new()
-            }
-            
-            local vel = (hrp.Position - state.prevPos) / math.max(dt, 0.001)
-            state.velocity = vel
-            state.smoothVel = state.smoothVel:Lerp(vel, 0.25)
-            state.prevPos = hrp.Position
-            hdt.killerState[killer] = state
+    local char = lp.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        
+        -- Remove BodyVelocity
+        if root then
+            local bv = root:FindFirstChildWhichIsA("BodyVelocity")
+            if bv then bv:Destroy() end
+            root.AssemblyLinearVelocity = Vector3.zero
+        end
+        
+        -- Restore values
+        if hum then
+            if hdt.origWalkSpeed then
+                hum.WalkSpeed = hdt.origWalkSpeed
+            end
+            if hdt.origJumpPower then
+                hum.JumpPower = hdt.origJumpPower
+            end
+            if hdt.origPlatformStand ~= nil then
+                hum.PlatformStand = hdt.origPlatformStand
+            end
+            if hdt.origAutoRotate ~= nil then
+                hum.AutoRotate = hdt.origAutoRotate
+            end
         end
     end
-end)
+    
+    hdt.debounce = false
+    hdt.target = nil
+    hdt.targetHRP = nil
+    hdt.origWalkSpeed = nil
+    hdt.origJumpPower = nil
+    hdt.origPlatformStand = nil
+    hdt.origAutoRotate = nil
+    
+    print("[HDT] 🛑 HDT stopped")
+end
+
+-- DETECT BLOCK ANIMATION (THIS IS THE KEY FIX - from working script)
+local function hdt_setupBlockDetection()
+    lp.CharacterAdded:Connect(function(char)
+        task.wait(0.5)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if not animator then return end
+        hdt.animator = animator
+        
+        -- Watch for block animation playing
+        local function checkBlockAnimation()
+            if not guestCfg.hdtEnabled then return end
+            if not animator then return end
+            
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                local animId = tostring(track.Animation and track.Animation.AnimationId or ""):match("%d+")
+                if animId and table.find(blockAnimIds, animId) then
+                    local timePos = 0
+                    pcall(function() timePos = track.TimePosition or 0 end)
+                    if timePos <= 0.12 then
+                        local killer, killerHRP = hdt_findTarget()
+                        if killer and killerHRP then
+                            print("[HDT] 🛡️ Block animation detected!")
+                            task.wait(guestCfg.hdtDelay)
+                            task.spawn(hdt_execute, killer, killerHRP)
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Check every frame
+        svc.Run.RenderStepped:Connect(function()
+            pcall(checkBlockAnimation)
+        end)
+    end)
+end
+
+-- Also check if Better Detection (AntiFlick) is active and trigger HDT from it
+local function hdt_setupAntiFlickDetection()
+    task.spawn(function()
+        while true do
+            svc.Run.Heartbeat:Wait()
+            
+            if not guestCfg.hdtEnabled then
+                task.wait(0.15)
+                continue
+            end
+            
+            local char = lp.Character
+            local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+            if not myRoot then 
+                task.wait(0.15) 
+                continue 
+            end
+            
+            -- Look for AntiFlickZone parts near the player
+            for _, part in ipairs(svc.WS:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name == "AntiFlickZone" then
+                    if (part.Position - myRoot.Position).Magnitude <= guestCfg.hdtRange then
+                        if not hdt.debounce then
+                            local nearest = hdt_findTarget()
+                            if nearest then
+                                print("[HDT] 🎯 AntiFlickZone detected!")
+                                task.wait(guestCfg.hdtDelay)
+                                task.spawn(hdt_execute, nearest)
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+            task.wait(0.12)
+        end
+    end)
+end
+
+-- Initialize
+task.spawn(hdt_setupBlockDetection)
+task.spawn(hdt_setupAntiFlickDetection)
 
 -- Range visualization
 local function hdt_updateRange()
@@ -5643,213 +5842,11 @@ end
 
 svc.Run.RenderStepped:Connect(hdt_updateRange)
 
--- MAIN HDT EXECUTION
-local function hdt_execute(killer, killerHRP)
-    if hdt.active then return end
-    if not killer or not killerHRP or not killerHRP.Parent then return end
-    
-    -- Check block cooldown
-    if not hdt_isBlockReady() then
-        print("[HDT] ⏳ Block on cooldown, waiting...")
-        local waited = 0
-        while not hdt_isBlockReady() and waited < 0.5 do
-            task.wait(0.05)
-            waited = waited + 0.05
-        end
-        if not hdt_isBlockReady() then
-            print("[HDT] ❌ Block still on cooldown, aborting")
-            return
-        end
-    end
-    
-    local char = lp.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not hum or not root then return end
-    
-    print("[HDT] 🚀 Starting HDT on:", killer.Name)
-    hdt.active = true
-    hdt.target = killer
-    hdt.targetHRP = killerHRP
-    
-    -- Save original values
-    hdt.origWalkSpeed = hum.WalkSpeed
-    hdt.origJumpPower = hum.JumpPower
-    hdt.origAutoRotate = hum.AutoRotate
-    
-    -- Disable jump and set speed
-    hum.JumpPower = 0
-    hum.WalkSpeed = 0
-    hum.AutoRotate = false
-    
-    -- Create BodyVelocity for smooth pulling
-    local bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(4000, 0, 4000)
-    bv.Velocity = Vector3.zero
-    bv.Parent = root
-    
-    local startTime = tick()
-    local duration = guestCfg.hdtDuration
-    
-    -- Main HDT loop
-    hdt.connection = svc.Run.Heartbeat:Connect(function(dt)
-        local elapsed = tick() - startTime
-        
-        -- Stop conditions
-        if elapsed >= duration or 
-           not guestCfg.hdtEnabled or 
-           not hdt.active or
-           not killer.Parent or
-           not killerHRP.Parent or
-           not root.Parent or
-           not hum.Parent then
-            hdt.cleanup()
-            return
-        end
-        
-        -- Get killer state for prediction
-        local state = hdt.killerState[killer]
-        local vel = state and state.smoothVel or Vector3.zero
-        
-        -- Predict target position
-        local targetPos = killerHRP.Position + vel * guestCfg.hdtPredict
-        
-        -- Calculate direction to target
-        local dir = (targetPos - root.Position)
-        local dist = dir.Magnitude
-        
-        if dist > 0.5 then
-            -- Pull toward target using BodyVelocity
-            local strength = math.min(guestCfg.hdtSpeed * guestCfg.hdtPullStrength, dist * 20)
-            local pullDir = dir.Unit * strength
-            bv.Velocity = Vector3.new(pullDir.X, root.AssemblyLinearVelocity.Y * 0.5, pullDir.Z)
-            
-            -- Face the killer if enabled
-            if guestCfg.hdtFaceKiller then
-                local faceDir = Vector3.new(
-                    killerHRP.Position.X - root.Position.X,
-                    0,
-                    killerHRP.Position.Z - root.Position.Z
-                )
-                if faceDir.Magnitude > 0.1 then
-                    faceDir = faceDir.Unit
-                    local targetCF = CFrame.new(root.Position, root.Position + faceDir)
-                    root.CFrame = root.CFrame:Lerp(targetCF, 0.3)
-                end
-            end
-        else
-            -- Close enough, just face them
-            bv.Velocity = Vector3.new(0, root.AssemblyLinearVelocity.Y * 0.5, 0)
-            if guestCfg.hdtFaceKiller then
-                local faceDir = Vector3.new(
-                    killerHRP.Position.X - root.Position.X,
-                    0,
-                    killerHRP.Position.Z - root.Position.Z
-                )
-                if faceDir.Magnitude > 0.1 then
-                    faceDir = faceDir.Unit
-                    root.CFrame = CFrame.new(root.Position, root.Position + faceDir)
-                end
-            end
-        end
-    end)
-end
-
--- Cleanup function
-function hdt.cleanup()
-    if hdt.connection then
-        hdt.connection:Disconnect()
-        hdt.connection = nil
-    end
-    
-    local char = lp.Character
-    if char then
-        local root = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        
-        -- Remove BodyVelocity
-        if root then
-            local bv = root:FindFirstChildWhichIsA("BodyVelocity")
-            if bv then bv:Destroy() end
-            root.AssemblyLinearVelocity = Vector3.zero
-        end
-        
-        -- Restore values
-        if hum then
-            if hdt.origWalkSpeed then
-                hum.WalkSpeed = hdt.origWalkSpeed
-            end
-            if hdt.origJumpPower then
-                hum.JumpPower = hdt.origJumpPower
-            end
-            if hdt.origAutoRotate ~= nil then
-                hum.AutoRotate = hdt.origAutoRotate
-            end
-        end
-    end
-    
-    hdt.active = false
-    hdt.target = nil
-    hdt.targetHRP = nil
-    hdt.origWalkSpeed = nil
-    hdt.origJumpPower = nil
-    hdt.origAutoRotate = nil
-    
-    print("[HDT] 🛑 HDT stopped")
-end
-
--- HOOK INTO BLOCK (supports both manual and auto block)
-local function hdt_setupBlockHook()
-    local remote = nil
-    pcall(function()
-        remote = svc.RS:WaitForChild("Modules",10):WaitForChild("Network",10):WaitForChild("Network",10):WaitForChild("RemoteEvent",10)
-    end)
-    if not remote then
-        print("[HDT] ❌ Could not find RemoteEvent")
-        return
-    end
-    
-    hdt.blockRemote = remote
-    
-    remote.OnClientEvent:Connect(function(action, data)
-        if not guestCfg.hdtEnabled then return end
-        if action ~= "UseActorAbility" then return end
-        if typeof(data) ~= "table" or not data[1] then return end
-        
-        local abilityName = ""
-        pcall(function()
-            if type(data[1]) == "buffer" then
-                abilityName = buffer.tostring(data[1])
-            end
-        end)
-        
-        -- Trigger on BLOCK (both manual and auto)
-        if abilityName:find("Block") then
-            print("[HDT] 🛡️ Block detected! (Auto or manual)")
-            
-            -- Small delay to let the block register properly
-            task.wait(0.05)
-            
-            -- Find nearest killer
-            local killer, killerHRP = hdt_findTarget()
-            if killer and killerHRP then
-                print("[HDT] 🎯 Found target:", killer.Name)
-                task.spawn(hdt_execute, killer, killerHRP)
-            else
-                print("[HDT] ❌ No killers within range")
-            end
-        end
-    end)
-end
-
 -- Handle character respawn
 lp.CharacterAdded:Connect(function()
     task.wait(0.5)
-    if hdt.active then hdt.cleanup() end
+    if hdt.debounce then hdt.cleanup() end
 end)
-
--- Initialize
-task.spawn(hdt_setupBlockHook)
 
 -- ============================================================
 -- UI - HDT
@@ -5865,15 +5862,15 @@ secHDT:Toggle({
     Callback = function(v)
         guestCfg.hdtEnabled = v
         saveCfg()
-        if not v and hdt.active then hdt.cleanup() end
+        if not v and hdt.debounce then hdt.cleanup() end
     end
 })
 
 secHDT:Slider({
     Title = "Pull Speed",
-    Description = "How fast you get pulled (higher = faster)",
-    Step = 5,
-    Value = { Min = 50, Max = 350, Default = guestCfg.hdtSpeed },
+    Description = "How fast you get pulled",
+    Step = 0.1,
+    Value = { Min = 1, Max = 20, Default = guestCfg.hdtSpeed },
     Callback = function(v)
         guestCfg.hdtSpeed = v
         saveCfg()
@@ -5883,8 +5880,8 @@ secHDT:Slider({
 secHDT:Slider({
     Title = "Pull Duration (s)",
     Description = "How long the pull lasts",
-    Step = 0.05,
-    Value = { Min = 0.2, Max = 2.0, Default = guestCfg.hdtDuration },
+    Step = 0.1,
+    Value = { Min = 0.5, Max = 3.0, Default = guestCfg.hdtDuration },
     Callback = function(v)
         guestCfg.hdtDuration = v
         saveCfg()
@@ -5895,7 +5892,7 @@ secHDT:Slider({
     Title = "Detection Range",
     Description = "How far to look for killers",
     Step = 1,
-    Value = { Min = 5, Max = 60, Default = guestCfg.hdtRange },
+    Value = { Min = 3, Max = 20, Default = guestCfg.hdtRange },
     Callback = function(v)
         guestCfg.hdtRange = v
         saveCfg()
@@ -5903,23 +5900,12 @@ secHDT:Slider({
 })
 
 secHDT:Slider({
-    Title = "Prediction (s)",
-    Description = "Predict where the killer will be",
-    Step = 0.01,
-    Value = { Min = 0, Max = 0.5, Default = guestCfg.hdtPredict },
-    Callback = function(v)
-        guestCfg.hdtPredict = v
-        saveCfg()
-    end
-})
-
-secHDT:Slider({
-    Title = "Pull Strength",
-    Description = "Multiplier for pull force",
+    Title = "Delay Before Pull (s)",
+    Description = "Delay before starting the pull",
     Step = 0.05,
-    Value = { Min = 0.5, Max = 2.0, Default = guestCfg.hdtPullStrength },
+    Value = { Min = 0, Max = 0.5, Default = guestCfg.hdtDelay },
     Callback = function(v)
-        guestCfg.hdtPullStrength = v
+        guestCfg.hdtDelay = v
         saveCfg()
     end
 })
@@ -5987,7 +5973,7 @@ secHDT:Button({
 secHDT:Button({
     Title = "⏹️ Stop HDT",
     Callback = function()
-        if hdt.active then
+        if hdt.debounce then
             hdt.cleanup()
             ui:Notify({
                 Title = "HDT Stopped",
@@ -6003,12 +5989,11 @@ secHDT:Button({
     Title = "Unload HDT",
     Callback = function()
         guestCfg.hdtEnabled = false
-        if hdt.active then hdt.cleanup() end
+        if hdt.debounce then hdt.cleanup() end
         if hdt.rangePart then
             hdt.rangePart:Destroy()
             hdt.rangePart = nil
         end
-        hdt.killerState = {}
         saveCfg()
         tabGuestHDT:Destroy()
         ui:Notify({
@@ -7086,6 +7071,35 @@ function applyConfigFromFlags()
         if win.Flags.plasmaEnabled ~= nil then plasma_enabled=win.Flags.plasmaEnabled end
         if type(win.Flags.plasmaPrediction)=="number" then plasma_prediction=win.Flags.plasmaPrediction end
         if type(win.Flags.plasmaAimOffset)=="number" then plasma_aimOffset=win.Flags.plasmaAimOffset end
+        -- HDT flags
+        if win.Flags.hdtEnabled ~= nil then 
+            guestCfg.hdtEnabled = win.Flags.hdtEnabled
+            saveCfg()
+        end
+        if type(win.Flags.hdtSpeed)=="number" then 
+            guestCfg.hdtSpeed = win.Flags.hdtSpeed
+            saveCfg()
+        end
+        if type(win.Flags.hdtDuration)=="number" then 
+            guestCfg.hdtDuration = win.Flags.hdtDuration
+            saveCfg()
+        end
+        if type(win.Flags.hdtRange)=="number" then 
+            guestCfg.hdtRange = win.Flags.hdtRange
+            saveCfg()
+        end
+        if type(win.Flags.hdtDelay)=="number" then 
+            guestCfg.hdtDelay = win.Flags.hdtDelay
+            saveCfg()
+        end
+        if win.Flags.hdtFaceKiller ~= nil then 
+            guestCfg.hdtFaceKiller = win.Flags.hdtFaceKiller
+            saveCfg()
+        end
+        if win.Flags.hdtShowRange ~= nil then 
+            guestCfg.hdtShowRange = win.Flags.hdtShowRange
+            saveCfg()
+        end
         
         print("[betrayalhub] All features restored from config!")
     end)
