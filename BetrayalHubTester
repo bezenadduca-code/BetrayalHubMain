@@ -237,6 +237,7 @@ local guestAutoBlockTriggerSounds = {
     ["125213046326879"]=true,["84353899757208"]=true, ["103684883268194"]=true,["109246041199659"]=true,
     ["80540530406270"]=true, ["139523195429581"]=true,["105204810054381"]=true,["114742322778642"]=true,
     ["116468089135195"]=true,
+    ["133709029886490"]=true,
 }
 
 local guestTrackedPunchAnimations = {
