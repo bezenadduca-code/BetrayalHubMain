@@ -107,7 +107,7 @@ WindUI:SetTheme("RedGoldBlack")
 local Window = WindUI:CreateWindow({
     Title            = "V1PRBLOCK",
     Icon             = "sparkle",
-    Author           = "Maintained By Viper",
+    Author           = "By Mitsuki ",
     Folder           = "V1rpBlock",
     Size             = UDim2.fromOffset(420, 550),
     Transparent      = false,
