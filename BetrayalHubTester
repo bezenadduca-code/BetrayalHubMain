@@ -2839,21 +2839,55 @@ local function addHighlight(obj, color, tag, label, offset)
         if not obj or tracked[tag][obj] or isRealPlayer(obj) then return end
         tracked[tag][obj] = true
         local root = obj
-        if obj:IsA("Model") then root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso") or obj.PrimaryPart
-            if not root then for _, c in ipairs(obj:GetChildren()) do if c:IsA("BasePart") then root=c; break end end end end
-        local hl = Instance.new("Highlight"); hl.Name=tag.."_HL"; hl.FillColor=color; hl.FillTransparency=mset.transparency
-        hl.OutlineColor=color; hl.OutlineTransparency=0.1; hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-        hl.Adornee=obj; hl.Parent=obj
+        if obj:IsA("Model") then 
+            root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso") or obj.PrimaryPart
+            if not root then 
+                for _, c in ipairs(obj:GetChildren()) do 
+                    if c:IsA("BasePart") then 
+                        root = c
+                        break 
+                    end 
+                end 
+            end
+        end -- ⬅️ THIS END WAS MISSING
+        
+        local hl = Instance.new("Highlight")
+        hl.Name = tag .. "_HL"
+        hl.FillColor = color
+        hl.FillTransparency = mset.transparency
+        hl.OutlineColor = color
+        hl.OutlineTransparency = 0.1
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Adornee = obj
+        hl.Parent = obj
+        
         if root then
-            local bb = Instance.new("BillboardGui"); bb.Name=tag.."_BB"; bb.Adornee=root; bb.Size=UDim2.new(0,130,0,24)
-            bb.StudsOffset=Vector3.new(0,offset or 3,0); bb.AlwaysOnTop=true; bb.Parent=obj
-            local lbl = Instance.new("TextLabel"); lbl.Size=UDim2.new(1,0,1,0); lbl.BackgroundTransparency=1; lbl.Text=label
-            lbl.TextColor3=color; lbl.TextStrokeColor3=Color3.new(0,0,0); lbl.TextStrokeTransparency=0.2
-            lbl.TextSize=12; lbl.Font=Enum.Font.GothamBold; lbl.Parent=bb
+            local bb = Instance.new("BillboardGui")
+            bb.Name = tag .. "_BB"
+            bb.Adornee = root
+            bb.Size = UDim2.new(0, 130, 0, 24)
+            bb.StudsOffset = Vector3.new(0, offset or 3, 0)
+            bb.AlwaysOnTop = true
+            bb.Parent = obj
+            
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, 0, 1, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = label
+            lbl.TextColor3 = color
+            lbl.TextStrokeColor3 = Color3.new(0, 0, 0)
+            lbl.TextStrokeTransparency = 0.2
+            lbl.TextSize = 12
+            lbl.Font = Enum.Font.GothamBold
+            lbl.Parent = bb
         end
-        obj.AncestryChanged:Connect(function() if obj.Parent then return end
-            local h2 = obj:FindFirstChild(tag.."_HL"); if h2 then h2:Destroy() end
-            local b2 = obj:FindFirstChild(tag.."_BB"); if b2 then b2:Destroy() end
+        
+        obj.AncestryChanged:Connect(function() 
+            if obj.Parent then return end
+            local h2 = obj:FindFirstChild(tag .. "_HL")
+            if h2 then h2:Destroy() end
+            local b2 = obj:FindFirstChild(tag .. "_BB")
+            if b2 then b2:Destroy() end
             tracked[tag][obj] = nil
         end)
     end)
@@ -4933,6 +4967,11 @@ local function g_attemptBlockForSound(sound, preId)
         if not ok or not res then return end
     end
     
+    -- ✅ FIX: Add block delay before firing
+    if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
+        task.wait(guestCfg.blockDelay)
+    end
+    
     g_fireBlock()
     g.lastBlockTime = tick()
     if guestCfg.autoPunchOn then task.delay(guestCfg.autoPunchDelay, g_firePunch) end
@@ -6160,6 +6199,10 @@ local function bd_spawnDetection(killer)
             
             local root = bd_getRoot()
             if root and bd_isPointInsidePart(part, root.Position) then
+                -- ✅ FIX: Add block delay before firing
+                if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
+                    task.wait(guestCfg.blockDelay)
+                end
                 bd_fireBlock()
                 if guestCfg.autoPunchOn then
                     task.delay(guestCfg.autoPunchDelay, bd_firePunch)
@@ -6526,6 +6569,10 @@ local function line_update()
                 and line_isBlockReady()
             then
                 line.lastBlockTime = now
+                -- ✅ FIX: Add block delay before firing
+                if guestCfg.lineBlockDelay and guestCfg.lineBlockDelay > 0 then
+                    task.wait(guestCfg.lineBlockDelay)
+                end
                 line_fireBlock()
                 if guestCfg.autoPunchOn then
                     task.delay(guestCfg.autoPunchDelay, line_firePunch)
