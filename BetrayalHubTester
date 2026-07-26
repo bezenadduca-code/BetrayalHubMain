@@ -155,10 +155,6 @@ end
 
 local win
 pcall(function()
--- ============================================================
--- GLOBAL GUEST CONFIG PATH - FIX FOR SYNTAX ERROR
--- ============================================================
-local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
     win = ui:CreateWindow({
         Title          = "BetrayalHub",
         Icon           = "sparkles",
@@ -1119,8 +1115,14 @@ local stam = {
     thread  = nil,
 }
 
+-- Cached module + original Init for restore
+local _stamMod = nil
+local _stamOrigInit = nil
+
 local function stamModule()
+    if _stamMod then return _stamMod end
     local ok, m = pcall(function() return require(svc.RS.Systems.Character.Game.Sprinting) end)
+    if ok and m then _stamMod = m; _stamOrigInit = m.Init end
     return ok and m or nil
 end
 
@@ -1128,6 +1130,21 @@ local function stamIsKiller()
     local ch = lp.Character; if not ch then return false end
     local kf = getTeamFolder("Killers")
     return kf and ch:IsDescendantOf(kf)
+end
+
+-- Patch Init so any internal re-init can't re-enable stamina loss
+local function stamPatchInit(m)
+    if not m then return end
+    m.Init = function(...)
+        local res = (_stamOrigInit or function() end)(...)
+        m.StaminaLossDisabled = true
+        return res
+    end
+end
+
+local function stamUnpatchInit(m)
+    if not m or not _stamOrigInit then return end
+    m.Init = _stamOrigInit
 end
 
 local function stamApply()
@@ -1142,6 +1159,7 @@ local function stamApply()
             if type(m.StaminaCap) == "number" then m.StaminaCap = stam.max end
         end
         m.StaminaLossDisabled = forceNoLoss
+        if forceNoLoss then stamPatchInit(m) else stamUnpatchInit(m) end
         if m.Stamina and m.Stamina > stam.max then m.Stamina = stam.current end
         pcall(function() if m.__staminaChangedEvent then m.__staminaChangedEvent:Fire() end end)
     end)
@@ -1175,10 +1193,28 @@ secStamina:Toggle({ Title = "Infinite Stamina", Type = "Checkbox", Flag = "stamN
     Callback = function(on)
         pcall(function()
             stam.noLoss = on
+            local m = stamModule()
+            if m then
+                m.StaminaLossDisabled = on
+                if on then
+                    stamPatchInit(m)
+                else
+                    stamUnpatchInit(m)
+                end
+            end
             stamApply()
         end)
     end
 })
+
+-- Auto-enable infinite stamina on load using goku hub method
+pcall(function()
+    local m = stamModule()
+    if m then
+        m.StaminaLossDisabled = true
+        stamPatchInit(m)
+    end
+end)
 
 if stam.on then stamStart() end
 
@@ -2357,15 +2393,6 @@ local esp = {
     itemCacheTime = 0, structCacheTime = 0, cacheLife = 5,
 }
 
--- Groundbulb & Vine ESP initialization (moved to top to prevent nil error)
-local gvEsp = {
-    on = false,
-    showGroundbulb = true,
-    showVine = true,
-    scanInterval = 0.5,
-    trackedEntities = {},
-}
-
 -- Generator label system
 local genLabels = {}
 local genConns  = {}
@@ -2775,12 +2802,10 @@ catSection:Toggle({ Title="Items", Type="Checkbox", Flag="espItems", Default=esp
 catSection:Toggle({ Title="Structures", Type="Checkbox", Flag="espStructures", Default=esp.showStructures,
     Callback=function(on) pcall(function() esp.showStructures=on; if esp.enabled then espClearAll(); espStart() end end) end })
 
-catSection:Toggle({ Title="Groundbulb & Vine", Type="Checkbox", Flag="gvEspOn", Default=gvEsp.on,
+catSection:Toggle({ Title="Groundbulb & Vine", Type="Checkbox", Flag="gvEspOn", Default=false,
     Callback=function(on)
         pcall(function()
-            if gvEsp then
-                if on then gvStart() else gvStop() end
-            end
+            if on then gvStart() else gvStop() end
         end)
     end })
 
@@ -2852,7 +2877,7 @@ local function addHighlight(obj, color, tag, label, offset)
                     end 
                 end 
             end
-        end -- ⬅️ THIS END WAS MISSING
+        end
         
         local hl = Instance.new("Highlight")
         hl.Name = tag .. "_HL"
@@ -2973,21 +2998,24 @@ secMinion:Slider({ Title="Highlight Transparency", Flag="espMinionTrans", Step=0
 secMinion:Button({ Title="Force Rescan", Callback=function() pcall(function() clearTag("pizza"); clearTag("zombie"); clearTag("puddle"); task.wait(0.1); scanPizza(); scanZombie(); scanPuddles() end) end })
 
 -- ============================================================
--- GROUNDBULB & VINE ESP (Integrated Working Version - FIXED)
+-- GROUNDBULB & VINE ESP
 -- ============================================================
 
 local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine Settings", Opened = false })
 
-local gvConfig = {
+-- Configuration
+local CONFIG = {
     HighlightColor = Color3.fromRGB(170, 0, 255),
     FillTransparency = 0.5,
     OutlineTransparency = 0.1,
+    ScanInterval = 0.5,
 }
 
+-- Tracked entities: Map<Model, Data>
+local trackedEntities = {}
+
 -- Function to find the highest part or flower part of the model for top positioning
-local function gvGetTopPart(model)
-    if not model then return nil end
-    
+local function getTopPart(model)
     local highestPart = model.PrimaryPart
     local highestY = highestPart and highestPart.Position.Y or -math.huge
 
@@ -3004,12 +3032,11 @@ local function gvGetTopPart(model)
 end
 
 -- Function to highlight a specific target model (Vine or GroundBulb)
-local function gvHighlightEntity(model, displayName)
+local function highlightEntity(model, displayName)
     if not model or not model:IsA("Model") then return end
-    if gvEsp.trackedEntities[model] then return end -- Already tracked
+    if trackedEntities[model] then return end
 
-    -- Find the highest part (the flower/top) to attach the billboard to
-    local adornPart = gvGetTopPart(model)
+    local adornPart = getTopPart(model)
     if not adornPart then
         for _, descendant in ipairs(model:GetDescendants()) do
             if descendant:IsA("BasePart") and descendant.Name ~= "Handle" then
@@ -3020,7 +3047,6 @@ local function gvHighlightEntity(model, displayName)
     end
 
     if not adornPart then
-        warn("[GV-ESP] No part found for:", model.Name)
         return
     end
 
@@ -3028,21 +3054,19 @@ local function gvHighlightEntity(model, displayName)
         model.PrimaryPart = adornPart
     end
 
-    -- Create the Highlight instance
     local highlight = Instance.new("Highlight")
-    highlight.Name = "GV_EntityHighlight"
+    highlight.Name = "EntityHighlight"
     highlight.Adornee = model
-    highlight.FillColor = gvConfig.HighlightColor
-    highlight.FillTransparency = gvConfig.FillTransparency
-    highlight.OutlineColor = gvConfig.HighlightColor
-    highlight.OutlineTransparency = gvConfig.OutlineTransparency
+    highlight.FillColor = CONFIG.HighlightColor
+    highlight.FillTransparency = CONFIG.FillTransparency
+    highlight.OutlineColor = CONFIG.HighlightColor
+    highlight.OutlineTransparency = CONFIG.OutlineTransparency
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Enabled = true
     highlight.Parent = model
 
-    -- Create a BillboardGui to display the text above the top of the entity
     local billboard = Instance.new("BillboardGui")
-    billboard.Name = "GV_EntityTag"
+    billboard.Name = "EntityTag"
     billboard.Size = UDim2.new(0, 200, 0, 30)
     billboard.Adornee = adornPart
     billboard.StudsOffset = Vector3.new(0, 3, 0)
@@ -3059,33 +3083,24 @@ local function gvHighlightEntity(model, displayName)
     label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     label.TextStrokeTransparency = 0.3
     label.FontFace = Font.new("rbxassetid://12187365364", Enum.FontWeight.Bold, Enum.FontStyle.Normal)
-    label.TextSize = 12
+    label.TextSize = 16
     label.Parent = billboard
 
-    -- Store the entity and its associated objects for cleanup
-    gvEsp.trackedEntities[model] = {
+    trackedEntities[model] = {
         Model = model,
         Highlight = highlight,
         Billboard = billboard,
     }
 end
 
--- Function to check and classify a model as Vine or GroundBulb (WITH FIX)
-local function gvEvaluateAndHighlight(child)
+-- Function to check and classify a model as Vine or GroundBulb
+local function evaluateAndHighlight(child)
     if not child:IsA("Model") then return end
-    
-    -- === FIX: EXPLICITLY IGNORE MAP AND PLAYER FOLDERS ===
-    if child.Name == "Map" then return end
-    if child.Name == "Players" then return end
-    
-    -- === FIX: IGNORE MODELS THAT ARE ACTUAL PLAYERS (HAS HUMANOID) ===
-    if child:FindFirstChildOfClass("Humanoid") then return end
 
     local nameLower = child.Name:lower()
     local isGroundBulb = nameLower:find("groundbulb")
     local isVine = nameLower:find("vine")
 
-    -- Deep checks if name doesn't match directly
     if not isGroundBulb and not isVine then
         for _, descendant in ipairs(child:GetDescendants()) do
             if descendant:IsA("BasePart") then
@@ -3101,17 +3116,15 @@ local function gvEvaluateAndHighlight(child)
         end
     end
 
-    if isGroundBulb and gvEsp.showGroundbulb and not gvEsp.trackedEntities[child] then
-        gvHighlightEntity(child, "GroundBulb")
-    elseif isVine and gvEsp.showVine and not gvEsp.trackedEntities[child] then
-        gvHighlightEntity(child, "Vine")
+    if isGroundBulb and not trackedEntities[child] then
+        highlightEntity(child, "GroundBulb")
+    elseif isVine and not trackedEntities[child] then
+        highlightEntity(child, "Vine")
     end
 end
 
 -- Function to scan the workspace for new Vines and GroundBulbs
-local function gvScanForSpawns()
-    if not gvEsp.on then return end
-    
+local function scanForSpawns()
     local map = svc.WS:FindFirstChild("Map")
     if not map then return end
 
@@ -3119,30 +3132,25 @@ local function gvScanForSpawns()
     if not ingame then return end
 
     for _, child in ipairs(ingame:GetChildren()) do
-        gvEvaluateAndHighlight(child)
+        evaluateAndHighlight(child)
     end
 end
 
 -- Clean up destroyed models to prevent memory leaks
-local function gvCleanupEntities()
-    for model, data in pairs(gvEsp.trackedEntities) do
+local function cleanupEntities()
+    for model, data in pairs(trackedEntities) do
         if not model or not model.Parent or not model:IsDescendantOf(svc.WS) then
-            if data.Highlight then 
-                pcall(function() data.Highlight:Destroy() end)
-            end
-            if data.Billboard then 
-                pcall(function() data.Billboard:Destroy() end)
-            end
-            gvEsp.trackedEntities[model] = nil
+            if data.Highlight then data.Highlight:Destroy() end
+            if data.Billboard then data.Billboard:Destroy() end
+            trackedEntities[model] = nil
         end
     end
 end
 
 -- Main update loop
-local function gvUpdateLoop()
-    if not gvEsp.on then return end
-    gvCleanupEntities()
-    gvScanForSpawns()
+local function updateLoop()
+    cleanupEntities()
+    scanForSpawns()
 end
 
 -- Start the highlighter
@@ -3150,43 +3158,36 @@ local gvConnection = nil
 local gvListenerConnection = nil
 
 local function gvStart()
-    if gvEsp.on then return end
-    gvEsp.on = true
+    if gvConnection then return end
     
-    print("[GV-ESP] Starting...")
-    task.wait(0.5)
-    gvScanForSpawns()
-    
-    if gvConnection then gvConnection:Disconnect() end
+    task.wait(2)
+    scanForSpawns()
+
     gvConnection = svc.Run.Heartbeat:Connect(function()
-        gvUpdateLoop()
+        updateLoop()
     end)
-    
-    -- Listen for new models added to the "Ingame" folder
-    local function gvSetupListener()
+
+    local function setupListener()
         local map = svc.WS:FindFirstChild("Map")
         if map then
             local ingame = map:FindFirstChild("Ingame")
             if ingame then
                 if gvListenerConnection then gvListenerConnection:Disconnect() end
                 gvListenerConnection = ingame.ChildAdded:Connect(function(child)
-                    if child:IsA("Model") and gvEsp.on then
+                    if child:IsA("Model") then
                         task.wait(0.5)
-                        gvEvaluateAndHighlight(child)
+                        evaluateAndHighlight(child)
                     end
                 end)
             end
         end
     end
-    
-    gvSetupListener()
-    print("[GV-ESP] Ready!")
+
+    setupListener()
 end
 
 local function gvStop()
-    gvEsp.on = false
-    
-    if gvConnection then 
+    if gvConnection then
         gvConnection:Disconnect()
         gvConnection = nil
     end
@@ -3196,50 +3197,25 @@ local function gvStop()
         gvListenerConnection = nil
     end
     
-    -- Clean up all tracked entities
-    for model, data in pairs(gvEsp.trackedEntities) do
-        if data.Highlight then 
-            pcall(function() data.Highlight:Destroy() end)
-        end
-        if data.Billboard then 
-            pcall(function() data.Billboard:Destroy() end)
-        end
+    for model, data in pairs(trackedEntities) do
+        if data.Highlight then data.Highlight:Destroy() end
+        if data.Billboard then data.Billboard:Destroy() end
     end
-    gvEsp.trackedEntities = {}
-    
-    print("[GV-ESP] Stopped")
+    trackedEntities = {}
 end
 
 -- UI Controls
 secGVEsp:Toggle({
-    Title = "Show Groundbulb",
+    Title = "Enable Groundbulb & Vine ESP",
     Type = "Checkbox",
-    Flag = "gvShowGroundbulb",
-    Default = gvEsp.showGroundbulb,
+    Flag = "gvEspOn",
+    Default = false,
     Callback = function(on)
-        pcall(function()
-            gvEsp.showGroundbulb = on
-            if gvEsp.on then
-                gvCleanupEntities()
-                gvScanForSpawns()
-            end
-        end)
-    end
-})
-
-secGVEsp:Toggle({
-    Title = "Show Vine",
-    Type = "Checkbox",
-    Flag = "gvShowVine",
-    Default = gvEsp.showVine,
-    Callback = function(on)
-        pcall(function()
-            gvEsp.showVine = on
-            if gvEsp.on then
-                gvCleanupEntities()
-                gvScanForSpawns()
-            end
-        end)
+        if on then
+            gvStart()
+        else
+            gvStop()
+        end
     end
 })
 
@@ -3247,62 +3223,37 @@ secGVEsp:Slider({
     Title = "Highlight Transparency",
     Flag = "gvTransparency",
     Step = 0.05,
-    Value = { Min = 0.1, Max = 1.0, Default = gvConfig.FillTransparency },
+    Value = { Min = 0.1, Max = 1.0, Default = CONFIG.FillTransparency },
     Callback = function(v)
-        pcall(function()
-            gvConfig.FillTransparency = v
-            for _, data in pairs(gvEsp.trackedEntities) do
-                if data.Highlight then
-                    data.Highlight.FillTransparency = v
-                end
+        CONFIG.FillTransparency = v
+        for _, data in pairs(trackedEntities) do
+            if data.Highlight then
+                data.Highlight.FillTransparency = v
             end
-        end)
+        end
     end
 })
 
 secGVEsp:Button({
     Title = "Refresh ESP",
     Callback = function()
-        pcall(function()
-            if gvEsp.on then
-                gvCleanupEntities()
-                gvScanForSpawns()
-                print("[GV-ESP] Refreshed")
-            end
-        end)
+        if gvConnection then
+            cleanupEntities()
+            scanForSpawns()
+        end
     end
 })
 
 secGVEsp:Button({
     Title = "Clear All Highlights",
     Callback = function()
-        pcall(function()
-            for model, data in pairs(gvEsp.trackedEntities) do
-                if data.Highlight then 
-                    pcall(function() data.Highlight:Destroy() end)
-                end
-                if data.Billboard then 
-                    pcall(function() data.Billboard:Destroy() end)
-                end
-            end
-            gvEsp.trackedEntities = {}
-            print("[GV-ESP] Cleared all highlights")
-        end)
+        for model, data in pairs(trackedEntities) do
+            if data.Highlight then data.Highlight:Destroy() end
+            if data.Billboard then data.Billboard:Destroy() end
+        end
+        trackedEntities = {}
     end
 })
-
--- Handle character respawn
-lp.CharacterAdded:Connect(function()
-    task.wait(2)
-    if gvEsp.on then
-        pcall(function()
-            gvCleanupEntities()
-            gvScanForSpawns()
-        end)
-    end
-end)
-
-print("[GV-ESP] Groundbulb & Vine ESP integrated")
 
 end -- tabESP
 do -- tabMusic
@@ -4745,6 +4696,8 @@ local tabGuestCore = win:Tab({ Title = "Guest Block", Icon = "shield" })
 
 local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
 
+local guestCfg = {
+    autoBlockOn = false, blockDelay = 0, detectionRange = 20,
     verifyFacingCheck = true, visionRange = 13.5, visionAngle = 85,
     showVisionCone = false, noHDTCooldown = false, hdtCooldownChecker = false,
     blockCooldown = 0.35, autoPunchDelay = 0.3,
@@ -4969,7 +4922,7 @@ local function g_attemptBlockForSound(sound, preId)
         if not ok or not res then return end
     end
     
-    -- ✅ FIX: Add block delay before firing
+    -- Add block delay before firing
     if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
         task.wait(guestCfg.blockDelay)
     end
@@ -5331,8 +5284,6 @@ svc.Run.RenderStepped:Connect(function()
             if not g.originalWS then
                 g.originalWS = g.humanoid.WalkSpeed
                 g.originalJP = g.humanoid.JumpPower
-                -- Fix: if aimbot is active and has already set AutoRotate=false,
-                -- use the aimbot's saved pre-lock value so we restore correctly
                 if aim.targeting and aim.autoRotate ~= nil then
                     g.originalAutoRotate = aim.autoRotate
                 else
@@ -5518,6 +5469,8 @@ local guestCfg = {}
 pcall(function()
     if fs.hasFile(GUEST_CONFIG_PATH) then
         local data = fs.read(GUEST_CONFIG_PATH)
+        if data and #data > 0 then
+            local decoded = svc.Http:JSONDecode(data)
             if decoded and type(decoded) == "table" then
                 for k, v in pairs(decoded) do guestCfg[k] = v end
             end
@@ -5556,7 +5509,7 @@ local hdt = {
     animator = nil,
 }
 
--- BLOCK ANIMATION IDs (from working script)
+-- BLOCK ANIMATION IDs
 local blockAnimIds = {
     "72722244508749",
     "96959123077498",
@@ -5587,7 +5540,6 @@ local function hdt_getTeam(name)
     return r and r:FindFirstChild(name)
 end
 
--- Find the best killer target
 local function hdt_findTarget()
     local root = hdt_getRoot()
     if not root then return nil, nil end
@@ -5619,7 +5571,7 @@ local function hdt_findTarget()
     return nil, nil
 end
 
--- MAIN HDT EXECUTION (using BodyVelocity like the working script)
+-- MAIN HDT EXECUTION
 local function hdt_execute(killer, killerHRP)
     if hdt.debounce then return end
     if not killer or not killerHRP or not killerHRP.Parent then return end
@@ -5635,19 +5587,16 @@ local function hdt_execute(killer, killerHRP)
     
     print("[HDT] 🚀 Dragging to:", killer.Name)
     
-    -- Save original values
     hdt.origWalkSpeed = hum.WalkSpeed
     hdt.origJumpPower = hum.JumpPower
     hdt.origPlatformStand = hum.PlatformStand
     hdt.origAutoRotate = hum.AutoRotate
     
-    -- Disable movement
     hum.WalkSpeed = 0
     hum.JumpPower = 0
     hum.PlatformStand = false
     hum.AutoRotate = false
     
-    -- Create BodyVelocity for smooth pulling (same as working script)
     local bv = Instance.new("BodyVelocity")
     bv.MaxForce = Vector3.new(1e5, 0, 1e5)
     bv.Velocity = Vector3.zero
@@ -5657,11 +5606,9 @@ local function hdt_execute(killer, killerHRP)
     local duration = guestCfg.hdtDuration
     local speed = guestCfg.hdtSpeed
     
-    -- Main HDT loop
     hdt.connection = svc.Run.Heartbeat:Connect(function(dt)
         local elapsed = tick() - startTime
         
-        -- Stop conditions
         if elapsed >= duration or 
            not guestCfg.hdtEnabled or 
            not killer.Parent or
@@ -5672,19 +5619,16 @@ local function hdt_execute(killer, killerHRP)
             return
         end
         
-        -- Calculate direction to target
         local toTarget = (killerHRP.Position - root.Position)
         local dist = toTarget.Magnitude
         
         if dist > 1 then
-            -- Pull toward target using BodyVelocity
             local horiz = Vector3.new(toTarget.X, 0, toTarget.Z)
             if horiz.Magnitude > 0.01 then
                 local dir = horiz.Unit
                 bv.Velocity = Vector3.new(dir.X * speed, bv.Velocity.Y, dir.Z * speed)
             end
             
-            -- Face the killer if enabled
             if guestCfg.hdtFaceKiller then
                 local faceDir = Vector3.new(
                     killerHRP.Position.X - root.Position.X,
@@ -5698,7 +5642,6 @@ local function hdt_execute(killer, killerHRP)
                 end
             end
         else
-            -- Close enough, stop pulling
             bv.Velocity = Vector3.new(0, bv.Velocity.Y, 0)
             if guestCfg.hdtFaceKiller then
                 local faceDir = Vector3.new(
@@ -5711,11 +5654,9 @@ local function hdt_execute(killer, killerHRP)
                     root.CFrame = CFrame.new(root.Position, root.Position + faceDir)
                 end
             end
-            -- Don't stop early - let duration slider handle when HDT ends
         end
     end)
     
-    -- Safety timeout (cleanup after duration + 0.5s)
     task.delay(duration + 0.5, function()
         if hdt.debounce then
             hdt.cleanup()
@@ -5735,14 +5676,12 @@ function hdt.cleanup()
         local root = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
         
-        -- Remove BodyVelocity
         if root then
             local bv = root:FindFirstChildWhichIsA("BodyVelocity")
             if bv then bv:Destroy() end
             root.AssemblyLinearVelocity = Vector3.zero
         end
         
-        -- Restore values
         if hum then
             if hdt.origWalkSpeed then
                 hum.WalkSpeed = hdt.origWalkSpeed
@@ -5770,7 +5709,7 @@ function hdt.cleanup()
     print("[HDT] 🛑 HDT stopped")
 end
 
--- DETECT BLOCK ANIMATION (THIS IS THE KEY FIX - from working script)
+-- DETECT BLOCK ANIMATION
 local function hdt_setupBlockDetection()
     lp.CharacterAdded:Connect(function(char)
         task.wait(0.5)
@@ -5780,7 +5719,6 @@ local function hdt_setupBlockDetection()
         if not animator then return end
         hdt.animator = animator
         
-        -- Watch for block animation playing
         local function checkBlockAnimation()
             if not guestCfg.hdtEnabled then return end
             if not animator then return end
@@ -5802,14 +5740,13 @@ local function hdt_setupBlockDetection()
             end
         end
         
-        -- Check every frame
         svc.Run.RenderStepped:Connect(function()
             pcall(checkBlockAnimation)
         end)
     end)
 end
 
--- Also check if Better Detection (AntiFlick) is active and trigger HDT from it
+-- AntiFlick detection
 local function hdt_setupAntiFlickDetection()
     task.spawn(function()
         while true do
@@ -5827,7 +5764,6 @@ local function hdt_setupAntiFlickDetection()
                 continue 
             end
             
-            -- Look for AntiFlickZone parts near the player
             for _, part in ipairs(svc.WS:GetDescendants()) do
                 if part:IsA("BasePart") and part.Name == "AntiFlickZone" then
                     if (part.Position - myRoot.Position).Magnitude <= guestCfg.hdtRange then
@@ -5884,7 +5820,6 @@ end
 
 svc.Run.RenderStepped:Connect(hdt_updateRange)
 
--- Handle character respawn
 lp.CharacterAdded:Connect(function()
     task.wait(0.5)
     if hdt.debounce then hdt.cleanup() end
@@ -5978,7 +5913,6 @@ secHDT:Toggle({
     end
 })
 
--- Test Button
 secHDT:Button({
     Title = "🧪 Test HDT (Force Pull)",
     Callback = function()
@@ -6011,7 +5945,6 @@ secHDT:Button({
     end
 })
 
--- Stop Button
 secHDT:Button({
     Title = "⏹️ Stop HDT",
     Callback = function()
@@ -6026,7 +5959,6 @@ secHDT:Button({
     end
 })
 
--- Unload
 secHDT:Button({
     Title = "Unload HDT",
     Callback = function()
@@ -6063,6 +5995,8 @@ local guestCfg = {}
 pcall(function()
     if fs.hasFile(GUEST_CONFIG_PATH) then
         local data = fs.read(GUEST_CONFIG_PATH)
+        if data and #data > 0 then
+            local decoded = svc.Http:JSONDecode(data)
             if decoded and type(decoded) == "table" then
                 for k, v in pairs(decoded) do guestCfg[k] = v end
             end
@@ -6200,7 +6134,6 @@ local function bd_spawnDetection(killer)
             
             local root = bd_getRoot()
             if root and bd_isPointInsidePart(part, root.Position) then
-                -- ✅ FIX: Add block delay before firing
                 if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
                     task.wait(guestCfg.blockDelay)
                 end
@@ -6346,6 +6279,8 @@ local guestCfg = {}
 pcall(function()
     if fs.hasFile(GUEST_CONFIG_PATH) then
         local data = fs.read(GUEST_CONFIG_PATH)
+        if data and #data > 0 then
+            local decoded = svc.Http:JSONDecode(data)
             if decoded and type(decoded) == "table" then
                 for k, v in pairs(decoded) do guestCfg[k] = v end
             end
@@ -6568,7 +6503,6 @@ local function line_update()
                 and line_isBlockReady()
             then
                 line.lastBlockTime = now
-                -- ✅ FIX: Add block delay before firing
                 if guestCfg.lineBlockDelay and guestCfg.lineBlockDelay > 0 then
                     task.wait(guestCfg.lineBlockDelay)
                 end
@@ -6636,6 +6570,8 @@ local guestCfg = {}
 pcall(function()
     if fs.hasFile(GUEST_CONFIG_PATH) then
         local data = fs.read(GUEST_CONFIG_PATH)
+        if data and #data > 0 then
+            local decoded = svc.Http:JSONDecode(data)
             if decoded and type(decoded) == "table" then
                 for k, v in pairs(decoded) do guestCfg[k] = v end
             end
@@ -6923,7 +6859,7 @@ print("[Guest Mobility] Loaded")
 end -- tabGuestMobility
 
 -- ============================================================
--- INTERFACE TAB (Continued from Part 2)
+-- INTERFACE TAB
 -- ============================================================
 
 end -- tabMusic
@@ -7027,7 +6963,7 @@ secConfigShare:Button({
 end -- interface tab
 
 -- ============================================================
--- CONFIG APPLY (Continued from Part 2)
+-- CONFIG APPLY
 -- ============================================================
 
 function applyConfigFromFlags()
@@ -7082,9 +7018,13 @@ function applyConfigFromFlags()
         if win.Flags.espGenerators ~= nil then esp.showGenerators=win.Flags.espGenerators end
         if win.Flags.espItems ~= nil then esp.showItems=win.Flags.espItems end
         if win.Flags.espStructures ~= nil then esp.showStructures=win.Flags.espStructures end
-        if win.Flags.gvEspOn ~= nil then gvEsp.on=win.Flags.gvEspOn; if gvEsp.on then gvStart() else gvStop() end end
-        if win.Flags.gvShowGroundbulb ~= nil then gvEsp.showGroundbulb=win.Flags.gvShowGroundbulb end
-        if win.Flags.gvShowVine ~= nil then gvEsp.showVine=win.Flags.gvShowVine end
+        if win.Flags.gvEspOn ~= nil then 
+            if win.Flags.gvEspOn then 
+                gvStart() 
+            else 
+                gvStop() 
+            end 
+        end
         if win.Flags.espPizza ~= nil then mset.pizza=win.Flags.espPizza end
         if win.Flags.espZombie ~= nil then mset.zombie=win.Flags.espZombie end
         if win.Flags.espPuddle ~= nil then mset.puddle=win.Flags.espPuddle end
