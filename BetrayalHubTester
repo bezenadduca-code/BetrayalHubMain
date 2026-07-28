@@ -1,4 +1,4 @@
--- BetrayalHub - Complete Final Version
+-- BetrayalHub - Complete Final Version (WindUI Config)
 
 print("betrayalhub loading...")
 
@@ -776,7 +776,7 @@ secInterface:Dropdown({
     Callback = function(v) pcall(function() timerSide = v; applyTimerPos() end) end
 })
 
--- Disable Jump Button - FIXED
+-- Disable Jump Button
 local jumpDisabled = false
 local jumpBackup = nil
 
@@ -789,31 +789,26 @@ local function toggleJump(enabled)
         local frame = touchGui:FindFirstChild("TouchControlFrame")
         if not frame then return end
         
-        -- Also disable jump power on humanoid
         local char = lp.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         
         if enabled then
-            -- Delete jump button
             local jump = frame:FindFirstChild("JumpButton")
             if jump then
                 jumpBackup = jump:Clone()
                 jump:Destroy()
                 print("[betrayalhub] Jump button disabled!")
             end
-            -- Set jump power to 0 to prevent keyboard jumping too
             if hum then
                 hum.JumpPower = 0
                 hum.Jump = false
             end
         else
-            -- Restore jump button
             if jumpBackup then
                 local newJump = jumpBackup:Clone()
                 newJump.Parent = frame
                 print("[betrayalhub] Jump button enabled!")
             end
-            -- Restore jump power
             if hum then
                 hum.JumpPower = 50
             end
@@ -837,7 +832,6 @@ lp.CharacterAdded:Connect(function(character)
             if spoofActive then spoofStart() end
             applyTimerPos()
             if jumpDisabled then toggleJump(true) end
-            -- Also reapply jump disable on new character
             if jumpDisabled then
                 local hum = character:FindFirstChildOfClass("Humanoid")
                 if hum then
@@ -849,7 +843,6 @@ lp.CharacterAdded:Connect(function(character)
     end)
 end)
 
--- Also connect to Humanoid on existing character
 task.delay(0.5, function()
     pcall(function()
         if jumpDisabled then
@@ -1151,7 +1144,6 @@ local stam = {
     thread  = nil,
 }
 
--- Cached module + original Init for restore
 local _stamMod = nil
 local _stamOrigInit = nil
 
@@ -1168,7 +1160,6 @@ local function stamIsKiller()
     return kf and ch:IsDescendantOf(kf)
 end
 
--- Patch Init so any internal re-init can't re-enable stamina loss
 local function stamPatchInit(m)
     if not m then return end
     m.Init = function(...)
@@ -1243,7 +1234,6 @@ secStamina:Toggle({ Title = "Infinite Stamina", Type = "Checkbox", Flag = "stamN
     end
 })
 
--- Auto-enable infinite stamina on load using goku hub method
 pcall(function()
     local m = stamModule()
     if m then
@@ -3505,6 +3495,7 @@ elliotMainTab:Toggle({
     Title = "Enable Aimbot",
     Description = "Toggle the aimbot on/off",
     Default = false,
+    Flag = "elliotEnabled",
     Callback = function(v)
         elliotEnabled = v
         if v then
@@ -3531,6 +3522,7 @@ elliotMainTab:Dropdown({
     Description = "Choose how the aimbot targets",
     Values = {"HRP Aimbot", "Camera Aimbot", "Camera + Character"},
     Value = "Camera + Character",
+    Flag = "elliotAimType",
     Callback = function(v)
         elliotAimType = v
         print("[Elliot] Aimbot type: " .. v)
@@ -3542,6 +3534,7 @@ elliotMainTab:Dropdown({
     Description = "How targets are selected",
     Values = {"Low HP", "Closest"},
     Value = "Low HP",
+    Flag = "elliotTargetMode",
     Callback = function(v)
         elliotTargetMode = v
         print("[Elliot] Target mode: " .. v)
@@ -3553,6 +3546,7 @@ elliotMainTab:Slider({
     Description = "Duration of throw animation window",
     Step = 0.1,
     Value = { Min = 0.1, Max = 2, Default = 0.6 },
+    Flag = "elliotThrowDur",
     Callback = function(v)
         elliotThrowDur = v
     end
@@ -3563,6 +3557,7 @@ elliotMainTab:Slider({
     Description = "How smooth the aimbot transitions",
     Step = 0.01,
     Value = { Min = 0.05, Max = 0.5, Default = 0.15 },
+    Flag = "elliotSmoothness",
     Callback = function(v)
         elliotSmoothness = v
     end
@@ -3573,6 +3568,7 @@ elliotMainTab:Slider({
     Description = "How much to predict target movement",
     Step = 1,
     Value = { Min = 0, Max = 50, Default = 5 },
+    Flag = "elliotPredDist",
     Callback = function(v)
         elliotPredDist = v
     end
@@ -3583,6 +3579,7 @@ elliotMainTab:Slider({
     Description = "Force of the throw",
     Step = 5,
     Value = { Min = 50, Max = 150, Default = 80 },
+    Flag = "elliotThrowForce",
     Callback = function(v)
         elliotThrowForce = v
     end
@@ -3593,6 +3590,7 @@ elliotMainTab:Slider({
     Description = "Number of segments in arc visualization",
     Step = 5,
     Value = { Min = 20, Max = 100, Default = 50 },
+    Flag = "elliotArcSegs",
     Callback = function(v)
         elliotArcSegs = v
     end
@@ -3602,6 +3600,7 @@ elliotMainTab:Toggle({
     Title = "Require Animation",
     Description = "Only aim when throw animation plays",
     Default = true,
+    Flag = "elliotRequireAnim",
     Callback = function(v)
         elliotRequireAnim = v
         print("[Elliot] Animation requirement: " .. (v and "ON" or "OFF"))
@@ -3612,6 +3611,7 @@ elliotMainTab:Toggle({
     Title = "Show Arc Visualization",
     Description = "Display the throw arc",
     Default = false,
+    Flag = "elliotShowArc",
     Callback = function(v)
         elliotShowArc = v
         if v then
@@ -3913,6 +3913,7 @@ local chanceMiscSec = tabChance:Section({ Title = "Misc", Opened = true })
 chanceAimSec:Toggle({
     Title = "Enable Aimbot",
     Default = false,
+    Flag = "chanceAimEnabled",
     Callback = function(v) chanceAimEnabled = v end,
 })
 
@@ -3920,12 +3921,14 @@ chanceAimSec:Dropdown({
     Title = "Prediction Mode",
     Values = { "Velocity", "Ping", "Look", "LookPing" },
     Value = "Velocity",
+    Flag = "chancePredMode",
     Callback = function(v) predMode = v end,
 })
 
 chanceAimSec:Input({
     Title = "Prediction Value",
     CurrentValue = "0.5",
+    Flag = "chancePredValue",
     Callback = function(v)
         local n = tonumber(v)
         if n then predValue = n end
@@ -3937,6 +3940,7 @@ chanceAimSec:Slider({
     Description = "Higher = snappier aim (14 default)",
     Step = 1,
     Value = { Min = 1, Max = 30, Default = 14 },
+    Flag = "chanceSmoothSpeed",
     Callback = function(v) smoothSpeed = v end,
 })
 
@@ -3944,6 +3948,7 @@ chanceAimSec:Toggle({
     Title = "Height-Aware Aim",
     Description = "Aim up/down for slopes and platforms",
     Default = true,
+    Flag = "chanceHeightAim",
     Callback = function(v) heightAim = v end,
 })
 
@@ -3951,12 +3956,14 @@ chanceAimSec:Dropdown({
     Title = "Aim Behavior",
     Values = { "Normal", "360" },
     Value = "Normal",
+    Flag = "chanceAimBehavior",
     Callback = function(v) aimBehavior = v end,
 })
 
 chanceAimSec:Input({
     Title = "Spin Duration",
     CurrentValue = "0.5",
+    Flag = "chanceSpinDuration",
     Callback = function(v)
         local n = tonumber(v)
         if n then spinDuration = n end
@@ -3967,18 +3974,21 @@ chanceAimSec:Toggle({
     Title = "Anti Bait",
     Description = "Caps velocity to known killer run speed",
     Default = true,
+    Flag = "chanceAntiBait",
     Callback = function(v) antiBait = v end,
 })
 
 chanceAimSec:Toggle({
     Title = "Message When Aim",
     Default = false,
+    Flag = "chanceMsgOnAim",
     Callback = function(v) msgOnAim = v end,
 })
 
 chanceAimSec:Input({
     Title = "Message Text",
     CurrentValue = "",
+    Flag = "chanceMsgText",
     Callback = function(v) msgText = v end,
 })
 
@@ -3986,6 +3996,7 @@ chancePCSec:Toggle({
     Title = "Hold-to-Aim",
     Description = "Hold the aim key to snap onto target (PC recommended)",
     Default = true,
+    Flag = "holdToAim",
     Callback = function(v) holdToAim = v end,
 })
 
@@ -3994,6 +4005,7 @@ chancePCSec:Dropdown({
     Description = "Key to hold when Hold-to-Aim is enabled",
     Values = { "Q", "E", "R", "T", "F", "G", "X", "C", "V" },
     Value = "Q",
+    Flag = "chanceAimKey",
     Callback = function(v)
         aimKey = Enum.KeyCode[v]
     end,
@@ -4036,12 +4048,14 @@ chanceAimSec:Button({
 chanceMiscSec:Toggle({
     Title = "Custom Shoot Anim",
     Default = false,
+    Flag = "chanceCustomAnim",
     Callback = function(v) customAnim = v end,
 })
 
 chanceMiscSec:Input({
     Title = "Animation ID",
     CurrentValue = "",
+    Flag = "chanceCustomAnimID",
     Callback = function(v) customAnimID = v end,
 })
 
@@ -4174,13 +4188,11 @@ tabDusekkar:Section({ Title = "System" }):Button({
 })
 
 -- ============================================================
--- GUEST 1337 - CORE BLOCK TAB
+-- GUEST 1337 - CORE BLOCK TAB (FIXED - Auto-restores vision on new round)
 -- ============================================================
 
 do -- tabGuestCore
 local tabGuestCore = win:Tab({ Title = "Guest Block", Icon = "shield" })
-
-local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
 
 local guestCfg = {
     autoBlockOn = false, blockDelay = 0, detectionRange = 20,
@@ -4197,31 +4209,6 @@ local guestCfg = {
     cinematicTextEnabled = false, cinematicText = "PARRY!",
 }
 
-local function loadGuestConfig()
-    pcall(function()
-        if fs.hasFile(GUEST_CONFIG_PATH) then
-            local data = fs.read(GUEST_CONFIG_PATH)
-            if data and #data > 0 then
-                local decoded = svc.Http:JSONDecode(data)
-                if decoded and type(decoded) == "table" then
-                    for k, v in pairs(decoded) do
-                        if guestCfg[k] ~= nil then guestCfg[k] = v end
-                    end
-                end
-            end
-        end
-    end)
-end
-
-local function saveGuestConfig()
-    pcall(function()
-        if not fs.hasFolder("betrayalhub") then fs.makeFolder("betrayalhub") end
-        fs.write(GUEST_CONFIG_PATH, svc.Http:JSONEncode(guestCfg))
-    end)
-end
-
-loadGuestConfig()
-
 -- GUEST STATE
 local g = {
     humanoid = nil, hrp = nil, lastBlockTime = 0,
@@ -4235,11 +4222,114 @@ local g = {
     fpsGui = nil, fpsLabel = nil, cinematicGui = nil,
     lastFpsUpdate = 0, frameCount = 0, fps = 0,
     noclipConn = nil,
+    visionCleanupConn = nil,
+    mapConns = {},
+    ingameConns = {},
+    roundActive = false,
 }
 
 local g_remote = nil
 pcall(function()
     g_remote = svc.RS:WaitForChild("Modules",10):WaitForChild("Network",10):WaitForChild("Network",10):WaitForChild("RemoteEvent",10)
+end)
+
+-- ============================================================
+-- FIX: Vision cleanup and restoration on round start
+-- ============================================================
+
+local function g_cleanupVision()
+    if g.centerPart then pcall(function() g.centerPart:Destroy() end); g.centerPart = nil end
+    if g.leftPart then pcall(function() g.leftPart:Destroy() end); g.leftPart = nil end
+    if g.rightPart then pcall(function() g.rightPart:Destroy() end); g.rightPart = nil end
+    if g.leftToKillerPart then pcall(function() g.leftToKillerPart:Destroy() end); g.leftToKillerPart = nil end
+    if g.rightToKillerPart then pcall(function() g.rightToKillerPart:Destroy() end); g.rightToKillerPart = nil end
+    if g.leftToCenterPart then pcall(function() g.leftToCenterPart:Destroy() end); g.leftToCenterPart = nil end
+    if g.centerToRightPart then pcall(function() g.centerToRightPart:Destroy() end); g.centerToRightPart = nil end
+end
+
+-- Clean up round watcher connections
+local function g_cleanupRoundWatcher()
+    if g.visionCleanupConn then
+        pcall(function() g.visionCleanupConn:Disconnect() end)
+        g.visionCleanupConn = nil
+    end
+    for _, conn in ipairs(g.mapConns) do
+        pcall(function() conn:Disconnect() end)
+    end
+    g.mapConns = {}
+    for _, conn in ipairs(g.ingameConns) do
+        pcall(function() conn:Disconnect() end)
+    end
+    g.ingameConns = {}
+end
+
+-- Watch for round restarts
+local function g_setupRoundWatcher()
+    g_cleanupRoundWatcher()
+    
+    -- Watch the Map object
+    local map = svc.WS:FindFirstChild("Map")
+    if map then
+        g.visionCleanupConn = map.AncestryChanged:Connect(function()
+            if not map.Parent then
+                print("[Guest Block] Map removed - cleaning vision")
+                g_cleanupVision()
+                g.roundActive = false
+                -- Re-setup watcher for new map
+                task.wait(0.5)
+                g_setupRoundWatcher()
+            end
+        end)
+    end
+    
+    -- Watch for Ingame being created (new round started)
+    local function onIngameCreated(ingame)
+        print("[Guest Block] New round detected - vision will restore")
+        g.roundActive = true
+        -- Vision will be recreated by the normal update loop
+        -- Force an immediate update
+        task.wait(0.1)
+        pcall(g_updateVision)
+    end
+    
+    -- Watch for Ingame in the map
+    local function watchForIngame()
+        local map2 = svc.WS:FindFirstChild("Map")
+        if map2 then
+            -- Check if Ingame already exists
+            local ingame = map2:FindFirstChild("Ingame")
+            if ingame then
+                g.roundActive = true
+                task.wait(0.1)
+                pcall(g_updateVision)
+            end
+            
+            -- Watch for Ingame being added
+            local conn = map2.ChildAdded:Connect(function(child)
+                if child.Name == "Ingame" then
+                    onIngameCreated(child)
+                end
+            end)
+            table.insert(g.mapConns, conn)
+        end
+    end
+    
+    watchForIngame()
+    
+    -- Also watch workspace for new Map
+    local wsConn = svc.WS.ChildAdded:Connect(function(child)
+        if child.Name == "Map" then
+            task.wait(0.5)
+            g_setupRoundWatcher()
+        end
+    end)
+    table.insert(g.mapConns, wsConn)
+end
+
+-- Setup round watcher on load
+task.spawn(function()
+    task.wait(0.5)
+    g_setupRoundWatcher()
 end)
 
 local function g_fireBlock()
@@ -4408,7 +4498,6 @@ local function g_attemptBlockForSound(sound, preId)
         if not ok or not res then return end
     end
     
-    -- Add block delay before firing
     if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
         task.wait(guestCfg.blockDelay)
     end
@@ -4474,7 +4563,7 @@ local function g_setupSoundHooks()
     end)
 end
 
--- VISION CONE
+-- VISION CONE - Auto-restores on new round
 local function g_createVisionPart()
     local p = Instance.new("Part")
     p.Size = Vector3.new(1,1,1); p.Shape = Enum.PartType.Ball
@@ -4493,31 +4582,31 @@ local function g_createConnPart()
     return p
 end
 
-local function g_cleanupVision()
-    if g.centerPart then g.centerPart:Destroy(); g.centerPart = nil end
-    if g.leftPart then g.leftPart:Destroy(); g.leftPart = nil end
-    if g.rightPart then g.rightPart:Destroy(); g.rightPart = nil end
-    if g.leftToKillerPart then g.leftToKillerPart:Destroy(); g.leftToKillerPart = nil end
-    if g.rightToKillerPart then g.rightToKillerPart:Destroy(); g.rightToKillerPart = nil end
-    if g.leftToCenterPart then g.leftToCenterPart:Destroy(); g.leftToCenterPart = nil end
-    if g.centerToRightPart then g.centerToRightPart:Destroy(); g.centerToRightPart = nil end
-end
-
 local function g_updateVision()
     local show = guestCfg.showVisionCone or guestCfg.legacyShowVisionRange
     if not show then
         if g.centerPart then g_cleanupVision() end
         return
     end
+    
+    -- Check if parts were destroyed (round reset) and recreate them
+    if g.centerPart and not g.centerPart.Parent then
+        g_cleanupVision()
+    end
+    
     local root = g_getRoot()
-    if not root then g_cleanupVision(); return end
+    if not root then 
+        -- If we have parts but no root, keep them but don't update position
+        -- They'll update when root exists
+        return 
+    end
     
     local origin
     if guestCfg.reverseEnabled or guestCfg.legacyFacingEnabled then
         origin = root
     else
         local kf = g_getTeam("Killers")
-        if not kf then g_cleanupVision(); return end
+        if not kf then return end
         local targets = {"Slasher","c00lkidd","JohnDoe","1x1x1x1","Noli","Sixer","Nosferatu"}
         for _, name in ipairs(targets) do
             local t = kf:FindFirstChild(name)
@@ -4526,7 +4615,7 @@ local function g_updateVision()
                 break
             end
         end
-        if not origin then g_cleanupVision(); return end
+        if not origin then return end
     end
     
     local range = guestCfg.legacyShowVisionRange and guestCfg.legacyVisionRange or guestCfg.visionRange
@@ -4540,19 +4629,35 @@ local function g_updateVision()
     local lPos = origin.Position + lDir * range
     local rPos = origin.Position + rDir * range
     
-    if not g.centerPart then g.centerPart = g_createVisionPart() end
-    if not g.leftPart then g.leftPart = g_createVisionPart() end
-    if not g.rightPart then g.rightPart = g_createVisionPart() end
-    if not g.leftToKillerPart then g.leftToKillerPart = g_createConnPart() end
-    if not g.rightToKillerPart then g.rightToKillerPart = g_createConnPart() end
-    if not g.leftToCenterPart then g.leftToCenterPart = g_createConnPart() end
-    if not g.centerToRightPart then g.centerToRightPart = g_createConnPart() end
+    -- Recreate any missing parts (auto-restores on new round)
+    if not g.centerPart or not g.centerPart.Parent then 
+        g.centerPart = g_createVisionPart() 
+    end
+    if not g.leftPart or not g.leftPart.Parent then 
+        g.leftPart = g_createVisionPart() 
+    end
+    if not g.rightPart or not g.rightPart.Parent then 
+        g.rightPart = g_createVisionPart() 
+    end
+    if not g.leftToKillerPart or not g.leftToKillerPart.Parent then 
+        g.leftToKillerPart = g_createConnPart() 
+    end
+    if not g.rightToKillerPart or not g.rightToKillerPart.Parent then 
+        g.rightToKillerPart = g_createConnPart() 
+    end
+    if not g.leftToCenterPart or not g.leftToCenterPart.Parent then 
+        g.leftToCenterPart = g_createConnPart() 
+    end
+    if not g.centerToRightPart or not g.centerToRightPart.Parent then 
+        g.centerToRightPart = g_createConnPart() 
+    end
     
     g.centerPart.Position = cPos
     g.leftPart.Position = lPos
     g.rightPart.Position = rPos
     
     local function updateLine(part, p1, p2)
+        if not part or not part.Parent then return end
         local mid = (p1+p2)/2
         local dist = (p2-p1).Magnitude
         part.Size = Vector3.new(0.1,0.1,dist)
@@ -4753,13 +4858,12 @@ svc.Run.RenderStepped:Connect(function(dt)
     end
 end)
 
--- MAIN RENDER LOOP - FIXED AIM PUNCH AUTOROTATE RESTORE
+-- MAIN RENDER LOOP - Updates vision every frame (auto-restores on new round)
 svc.Run.RenderStepped:Connect(function()
     -- Aim punch
     if guestCfg.aimPunchActive and g.humanoid and g.hrp and g.punchAiming then
         local elapsed = tick() - g.punchLastTriggerTime
         
-        -- Check if aim punch duration expired OR auto punch fired
         local autoPunchFired = false
         if guestCfg.autoPunchOn then
             local lastBlock = g.lastBlockTime or 0
@@ -4773,7 +4877,6 @@ svc.Run.RenderStepped:Connect(function()
             if g.originalWS then
                 g.humanoid.WalkSpeed = g.originalWS
                 g.humanoid.JumpPower = g.originalJP
-                -- FIX: Restore AutoRotate properly
                 if g.originalAutoRotate ~= nil then
                     g.humanoid.AutoRotate = g.originalAutoRotate
                 end
@@ -4810,6 +4913,7 @@ svc.Run.RenderStepped:Connect(function()
         end
     end
     
+    -- Update vision (auto-restores if parts were destroyed)
     pcall(g_updateVision)
     pcall(g_updatePing)
     pcall(g_updateHDTCooldown)
@@ -4818,8 +4922,21 @@ end)
 
 -- INIT
 g_setupSoundHooks()
-lp.CharacterAdded:Connect(function(c) task.delay(0.5, function() g_setupChar(c); if guestCfg.noclipEnabled then g_enableNoclip() end end) end)
-if lp.Character then g_setupChar(lp.Character) end
+lp.CharacterAdded:Connect(function(c) 
+    task.delay(0.5, function() 
+        g_setupChar(c); 
+        if guestCfg.noclipEnabled then g_enableNoclip() end
+        -- Recreate vision on character spawn
+        task.wait(0.1)
+        pcall(g_updateVision)
+    end) 
+end)
+if lp.Character then 
+    g_setupChar(lp.Character) 
+    -- Initial vision setup
+    task.wait(0.5)
+    pcall(g_updateVision)
+end
 if guestCfg.noclipEnabled then g_enableNoclip() end
 
 -- ============================================================
@@ -4828,102 +4945,118 @@ if guestCfg.noclipEnabled then g_enableNoclip() end
 
 local secCore = tabGuestCore:Section({ Title = "Core Block", Opened = true })
 
-secCore:Toggle({ Title="Auto Block", Type="Checkbox", Default=guestCfg.autoBlockOn,
-    Callback=function(v) guestCfg.autoBlockOn=v; saveGuestConfig() end })
+secCore:Toggle({ Title="Auto Block", Type="Checkbox", Flag="guestAutoBlockOn", Default=guestCfg.autoBlockOn,
+    Callback=function(v) guestCfg.autoBlockOn=v end })
 
-secCore:Slider({ Title="Block Delay", Step=0.05, Value={Min=0,Max=2,Default=guestCfg.blockDelay},
-    Callback=function(v) guestCfg.blockDelay=v; saveGuestConfig() end })
+secCore:Slider({ Title="Block Delay", Flag="guestBlockDelay", Step=0.05, Value={Min=0,Max=2,Default=guestCfg.blockDelay},
+    Callback=function(v) guestCfg.blockDelay=v end })
 
-secCore:Slider({ Title="Auto Block Radius", Step=1, Value={Min=1,Max=50,Default=guestCfg.detectionRange},
-    Callback=function(v) guestCfg.detectionRange=v; saveGuestConfig() end })
+secCore:Slider({ Title="Auto Block Radius", Flag="guestDetectionRange", Step=1, Value={Min=1,Max=50,Default=guestCfg.detectionRange},
+    Callback=function(v) guestCfg.detectionRange=v end })
 
-secCore:Toggle({ Title="Verify Facing Check", Type="Checkbox", Default=guestCfg.verifyFacingCheck,
-    Callback=function(v) guestCfg.verifyFacingCheck=v; saveGuestConfig() end })
+secCore:Toggle({ Title="Verify Facing Check", Type="Checkbox", Flag="guestVerifyFacingCheck", Default=guestCfg.verifyFacingCheck,
+    Callback=function(v) guestCfg.verifyFacingCheck=v end })
 
-secCore:Slider({ Title="Vision Range", Step=0.5, Value={Min=1,Max=20,Default=guestCfg.visionRange},
-    Callback=function(v) guestCfg.visionRange=v; saveGuestConfig() end })
+secCore:Slider({ Title="Vision Range", Flag="guestVisionRange", Step=0.5, Value={Min=1,Max=20,Default=guestCfg.visionRange},
+    Callback=function(v) guestCfg.visionRange=v end })
 
-secCore:Slider({ Title="Vision Angle", Step=1, Value={Min=1,Max=200,Default=guestCfg.visionAngle},
-    Callback=function(v) guestCfg.visionAngle=v; saveGuestConfig() end })
+secCore:Slider({ Title="Vision Angle", Flag="guestVisionAngle", Step=1, Value={Min=1,Max=200,Default=guestCfg.visionAngle},
+    Callback=function(v) guestCfg.visionAngle=v end })
 
-secCore:Toggle({ Title="Show Vision Cone", Type="Checkbox", Default=guestCfg.showVisionCone,
-    Callback=function(v) guestCfg.showVisionCone=v; saveGuestConfig(); if not v then g_cleanupVision() end end })
+secCore:Toggle({ Title="Show Vision Cone", Type="Checkbox", Flag="guestShowVisionCone", Default=guestCfg.showVisionCone,
+    Callback=function(v) 
+        guestCfg.showVisionCone=v
+        if not v then 
+            g_cleanupVision() 
+        else
+            -- Immediately show vision if enabled
+            task.wait(0.1)
+            pcall(g_updateVision)
+        end
+    end })
 
-secCore:Toggle({ Title="No HDT Cooldown", Type="Checkbox", Default=guestCfg.noHDTCooldown,
-    Callback=function(v) guestCfg.noHDTCooldown=v; saveGuestConfig() end })
+secCore:Toggle({ Title="No HDT Cooldown", Type="Checkbox", Flag="guestNoHDTCooldown", Default=guestCfg.noHDTCooldown,
+    Callback=function(v) guestCfg.noHDTCooldown=v end })
 
-secCore:Toggle({ Title="Block Cooldown Checker", Type="Checkbox", Default=guestCfg.hdtCooldownChecker,
-    Callback=function(v) guestCfg.hdtCooldownChecker=v; saveGuestConfig(); if not v and g.hdtCooldownGui then g.hdtCooldownGui:Destroy(); g.hdtCooldownGui=nil; g.hdtCooldownLabel=nil end end })
+secCore:Toggle({ Title="Block Cooldown Checker", Type="Checkbox", Flag="guestHdtCooldownChecker", Default=guestCfg.hdtCooldownChecker,
+    Callback=function(v) guestCfg.hdtCooldownChecker=v; if not v and g.hdtCooldownGui then g.hdtCooldownGui:Destroy(); g.hdtCooldownGui=nil; g.hdtCooldownLabel=nil end end })
 
-secCore:Slider({ Title="Block Cooldown (s)", Step=0.05, Value={Min=0.05,Max=2,Default=guestCfg.blockCooldown},
-    Callback=function(v) guestCfg.blockCooldown=v; saveGuestConfig() end })
+secCore:Slider({ Title="Block Cooldown (s)", Flag="guestBlockCooldown", Step=0.05, Value={Min=0.05,Max=2,Default=guestCfg.blockCooldown},
+    Callback=function(v) guestCfg.blockCooldown=v end })
 
-secCore:Slider({ Title="Auto Punch Delay (s)", Step=0.05, Value={Min=0,Max=2,Default=guestCfg.autoPunchDelay},
-    Callback=function(v) guestCfg.autoPunchDelay=v; saveGuestConfig() end })
+secCore:Slider({ Title="Auto Punch Delay (s)", Flag="guestAutoPunchDelay", Step=0.05, Value={Min=0,Max=2,Default=guestCfg.autoPunchDelay},
+    Callback=function(v) guestCfg.autoPunchDelay=v end })
 
-secCore:Toggle({ Title="Auto Punch", Type="Checkbox", Default=guestCfg.autoPunchOn,
-    Callback=function(v) guestCfg.autoPunchOn=v; saveGuestConfig() end })
+secCore:Toggle({ Title="Auto Punch", Type="Checkbox", Flag="guestAutoPunchOn", Default=guestCfg.autoPunchOn,
+    Callback=function(v) guestCfg.autoPunchOn=v end })
 
-secCore:Toggle({ Title="Aim Punch", Type="Checkbox", Default=guestCfg.aimPunchActive,
-    Callback=function(v) guestCfg.aimPunchActive=v; saveGuestConfig(); if v and lp.Character then g_setupChar(lp.Character) end end })
+secCore:Toggle({ Title="Aim Punch", Type="Checkbox", Flag="guestAimPunchActive", Default=guestCfg.aimPunchActive,
+    Callback=function(v) guestCfg.aimPunchActive=v; if v and lp.Character then g_setupChar(lp.Character) end end })
 
-secCore:Slider({ Title="Punch Prediction", Step=0.1, Value={Min=0,Max=10,Default=guestCfg.punchPrediction},
-    Callback=function(v) guestCfg.punchPrediction=v; saveGuestConfig() end })
+secCore:Slider({ Title="Punch Prediction", Flag="guestPunchPrediction", Step=0.1, Value={Min=0,Max=10,Default=guestCfg.punchPrediction},
+    Callback=function(v) guestCfg.punchPrediction=v end })
 
-secCore:Input({ Title="Custom Punch Sound ID", Placeholder=tostring(guestCfg.customPunchSoundId),
-    Callback=function(v) local n=tonumber(v); guestCfg.customPunchSoundId=n or 0; saveGuestConfig() end })
+secCore:Input({ Title="Custom Punch Sound ID", Flag="guestCustomPunchSoundId", Placeholder=tostring(guestCfg.customPunchSoundId),
+    Callback=function(v) local n=tonumber(v); guestCfg.customPunchSoundId=n or 0 end })
 
-secCore:Slider({ Title="Aim Lock Duration (s)", Step=0.05, Value={Min=0.1,Max=2,Default=guestCfg.aimPunchDuration},
-    Callback=function(v) guestCfg.aimPunchDuration=v; saveGuestConfig() end })
+secCore:Slider({ Title="Aim Lock Duration (s)", Flag="guestAimPunchDuration", Step=0.05, Value={Min=0.1,Max=2,Default=guestCfg.aimPunchDuration},
+    Callback=function(v) guestCfg.aimPunchDuration=v end })
 
 -- Cinematic Text
 local secCine = tabGuestCore:Section({ Title = "Cinematic Text", Opened = false })
-secCine:Toggle({ Title="Enable Cinematic Text", Type="Checkbox", Default=guestCfg.cinematicTextEnabled,
-    Callback=function(v) guestCfg.cinematicTextEnabled=v; saveGuestConfig() end })
-secCine:Input({ Title="Text Content", Placeholder=guestCfg.cinematicText,
-    Callback=function(v) if v ~= "" then guestCfg.cinematicText=v; saveGuestConfig() end end })
+secCine:Toggle({ Title="Enable Cinematic Text", Type="Checkbox", Flag="guestCinematicTextEnabled", Default=guestCfg.cinematicTextEnabled,
+    Callback=function(v) guestCfg.cinematicTextEnabled=v end })
+secCine:Input({ Title="Text Content", Flag="guestCinematicText", Placeholder=guestCfg.cinematicText,
+    Callback=function(v) if v ~= "" then guestCfg.cinematicText=v end end })
 
 -- Reverse Section
 local secReverse = tabGuestCore:Section({ Title = "Reverse", Opened = false })
-secReverse:Toggle({ Title="Enable Reverse", Type="Checkbox", Default=guestCfg.reverseEnabled,
-    Callback=function(v) guestCfg.reverseEnabled=v; saveGuestConfig() end })
+secReverse:Toggle({ Title="Enable Reverse", Type="Checkbox", Flag="guestReverseEnabled", Default=guestCfg.reverseEnabled,
+    Callback=function(v) guestCfg.reverseEnabled=v end })
 secReverse:Paragraph({ Title="Info", Content="When enabled, the block zone is centered on YOU instead of the killer." })
 
 -- Legacy Section
 local secLegacy = tabGuestCore:Section({ Title = "Legacy Facing", Opened = false })
-secLegacy:Toggle({ Title="Enable Legacy Facing", Type="Checkbox", Default=guestCfg.legacyFacingEnabled,
-    Callback=function(v) guestCfg.legacyFacingEnabled=v; saveGuestConfig() end })
-secLegacy:Slider({ Title="Vision Range", Step=0.5, Value={Min=1,Max=20,Default=guestCfg.legacyVisionRange},
-    Callback=function(v) guestCfg.legacyVisionRange=v; saveGuestConfig() end })
-secLegacy:Slider({ Title="Vision Angle", Step=1, Value={Min=1,Max=200,Default=guestCfg.legacyVisionAngle},
-    Callback=function(v) guestCfg.legacyVisionAngle=v; saveGuestConfig() end })
-secLegacy:Toggle({ Title="Show Vision Range", Type="Checkbox", Default=guestCfg.legacyShowVisionRange,
-    Callback=function(v) guestCfg.legacyShowVisionRange=v; saveGuestConfig() end })
+secLegacy:Toggle({ Title="Enable Legacy Facing", Type="Checkbox", Flag="guestLegacyFacingEnabled", Default=guestCfg.legacyFacingEnabled,
+    Callback=function(v) guestCfg.legacyFacingEnabled=v end })
+secLegacy:Slider({ Title="Vision Range", Flag="guestLegacyVisionRange", Step=0.5, Value={Min=1,Max=20,Default=guestCfg.legacyVisionRange},
+    Callback=function(v) guestCfg.legacyVisionRange=v end })
+secLegacy:Slider({ Title="Vision Angle", Flag="guestLegacyVisionAngle", Step=1, Value={Min=1,Max=200,Default=guestCfg.legacyVisionAngle},
+    Callback=function(v) guestCfg.legacyVisionAngle=v end })
+secLegacy:Toggle({ Title="Show Vision Range", Type="Checkbox", Flag="guestLegacyShowVisionRange", Default=guestCfg.legacyShowVisionRange,
+    Callback=function(v) 
+        guestCfg.legacyShowVisionRange=v
+        if not v then 
+            g_cleanupVision() 
+        else
+            task.wait(0.1)
+            pcall(g_updateVision)
+        end
+    end })
 
 -- Misc Section
 local secMisc = tabGuestCore:Section({ Title = "Misc", Opened = false })
-secMisc:Toggle({ Title="Smart Delay", Type="Checkbox", Default=guestCfg.smartDelayEnabled,
-    Callback=function(v) guestCfg.smartDelayEnabled=v; saveGuestConfig() end })
-secMisc:Toggle({ Title="Manual Drag", Type="Checkbox", Default=guestCfg.manualDragEnabled,
-    Callback=function(v) guestCfg.manualDragEnabled=v; saveGuestConfig() end })
-secMisc:Toggle({ Title="Noclip", Type="Checkbox", Default=guestCfg.noclipEnabled,
-    Callback=function(v) guestCfg.noclipEnabled=v; saveGuestConfig(); if v then g_enableNoclip() else g_disableNoclip() end end })
-secMisc:Toggle({ Title="Noclip Only When Block Ready", Type="Checkbox", Default=guestCfg.noclipOnlyWhenBlockReady,
-    Callback=function(v) guestCfg.noclipOnlyWhenBlockReady=v; saveGuestConfig() end })
-secMisc:Toggle({ Title="FPS Counter", Type="Checkbox", Default=guestCfg.fpsCounterEnabled,
-    Callback=function(v) guestCfg.fpsCounterEnabled=v; saveGuestConfig(); if not v and g.fpsGui then g.fpsGui:Destroy(); g.fpsGui=nil; g.fpsLabel=nil end end })
-secMisc:Toggle({ Title="Ping Checker", Type="Checkbox", Default=guestCfg.pingCheckerEnabled,
-    Callback=function(v) guestCfg.pingCheckerEnabled=v; saveGuestConfig(); if not v and g.pingLabel then g.pingLabel.Parent.Parent:Destroy(); g.pingLabel=nil end end })
+secMisc:Toggle({ Title="Smart Delay", Type="Checkbox", Flag="guestSmartDelayEnabled", Default=guestCfg.smartDelayEnabled,
+    Callback=function(v) guestCfg.smartDelayEnabled=v end })
+secMisc:Toggle({ Title="Manual Drag", Type="Checkbox", Flag="guestManualDragEnabled", Default=guestCfg.manualDragEnabled,
+    Callback=function(v) guestCfg.manualDragEnabled=v end })
+secMisc:Toggle({ Title="Noclip", Type="Checkbox", Flag="guestNoclipEnabled", Default=guestCfg.noclipEnabled,
+    Callback=function(v) guestCfg.noclipEnabled=v; if v then g_enableNoclip() else g_disableNoclip() end end })
+secMisc:Toggle({ Title="Noclip Only When Block Ready", Type="Checkbox", Flag="guestNoclipOnlyWhenBlockReady", Default=guestCfg.noclipOnlyWhenBlockReady,
+    Callback=function(v) guestCfg.noclipOnlyWhenBlockReady=v end })
+secMisc:Toggle({ Title="FPS Counter", Type="Checkbox", Flag="guestFpsCounterEnabled", Default=guestCfg.fpsCounterEnabled,
+    Callback=function(v) guestCfg.fpsCounterEnabled=v; if not v and g.fpsGui then g.fpsGui:Destroy(); g.fpsGui=nil; g.fpsLabel=nil end end })
+secMisc:Toggle({ Title="Ping Checker", Type="Checkbox", Flag="guestPingCheckerEnabled", Default=guestCfg.pingCheckerEnabled,
+    Callback=function(v) guestCfg.pingCheckerEnabled=v; if not v and g.pingLabel then g.pingLabel.Parent.Parent:Destroy(); g.pingLabel=nil end end })
 
 -- Control
 local secCtrl = tabGuestCore:Section({ Title = "Control", Opened = true })
-secCtrl:Button({ Title="Save Config", Callback=function() saveGuestConfig(); ui:Notify({Title="Config Saved", Content="Guest settings saved", Duration=2}) end })
-secCtrl:Button({ Title="Load Config", Callback=function() loadGuestConfig(); ui:Notify({Title="Config Loaded", Content="Guest settings loaded", Duration=2}) end })
 secCtrl:Button({ Title="Unload Guest Block", Callback=function()
     pcall(function()
         if g.aimConnection then g.aimConnection:Disconnect() end
         if g.noclipConn then g.noclipConn:Disconnect() end
         g_cleanupVision()
+        g_cleanupRoundWatcher()
         if g.cinematicGui then g.cinematicGui:Destroy() end
         if g.hdtCooldownGui then g.hdtCooldownGui:Destroy() end
         if g.fpsGui then g.fpsGui:Destroy() end
@@ -4947,7 +5080,7 @@ secCtrl:Button({ Title="Unload Guest Block", Callback=function()
     ui:Notify({Title="Guest Block Unloaded", Content="All features disabled", Duration=2})
 end })
 
-print("[Guest Core] Loaded")
+print("[Guest Core] Loaded with auto-restore on new rounds")
 
 end -- tabGuestCore
 
@@ -4958,36 +5091,16 @@ end -- tabGuestCore
 do -- tabGuestHDT
 local tabGuestHDT = win:Tab({ Title = "Guest HDT", Icon = "target" })
 
--- Load config
-local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
-local guestCfg = {}
-pcall(function()
-    if fs.hasFile(GUEST_CONFIG_PATH) then
-        local data = fs.read(GUEST_CONFIG_PATH)
-        if data and #data > 0 then
-            local decoded = svc.Http:JSONDecode(data)
-            if decoded and type(decoded) == "table" then
-                for k, v in pairs(decoded) do guestCfg[k] = v end
-            end
-        end
-    end
-end)
-
 -- HDT Settings
-guestCfg.hdtEnabled = guestCfg.hdtEnabled or false
-guestCfg.hdtSpeed = guestCfg.hdtSpeed or 5.6
-guestCfg.hdtDuration = guestCfg.hdtDuration or 1.4
-guestCfg.hdtRange = guestCfg.hdtRange or 6
-guestCfg.hdtDelay = guestCfg.hdtDelay or 0
-guestCfg.hdtShowRange = guestCfg.hdtShowRange or false
-guestCfg.hdtFaceKiller = guestCfg.hdtFaceKiller or true
-
-local function saveCfg()
-    pcall(function()
-        if not fs.hasFolder("betrayalhub") then fs.makeFolder("betrayalhub") end
-        fs.write(GUEST_CONFIG_PATH, svc.Http:JSONEncode(guestCfg))
-    end)
-end
+local guestCfg = {
+    hdtEnabled = false,
+    hdtSpeed = 5.6,
+    hdtDuration = 1.4,
+    hdtRange = 6,
+    hdtDelay = 0,
+    hdtShowRange = false,
+    hdtFaceKiller = true,
+}
 
 -- HDT STATE
 local hdt = {
@@ -5083,19 +5196,16 @@ local function hdt_execute(killer, killerHRP)
     
     print("[HDT] 🚀 Dragging to:", killer.Name)
     
-    -- Save original values
     hdt.origWalkSpeed = hum.WalkSpeed
     hdt.origJumpPower = hum.JumpPower
     hdt.origPlatformStand = hum.PlatformStand
     hdt.origAutoRotate = hum.AutoRotate
     
-    -- Disable movement
     hum.WalkSpeed = 0
     hum.JumpPower = 0
     hum.PlatformStand = false
     hum.AutoRotate = false
     
-    -- Create BodyVelocity for smooth pulling
     local bv = Instance.new("BodyVelocity")
     bv.MaxForce = Vector3.new(1e5, 0, 1e5)
     bv.Velocity = Vector3.zero
@@ -5105,11 +5215,9 @@ local function hdt_execute(killer, killerHRP)
     local duration = guestCfg.hdtDuration
     local speed = guestCfg.hdtSpeed
     
-    -- Main HDT loop
     hdt.connection = svc.Run.Heartbeat:Connect(function(dt)
         local elapsed = tick() - startTime
         
-        -- Stop conditions
         if elapsed >= duration or 
            not guestCfg.hdtEnabled or 
            not killer.Parent or
@@ -5120,19 +5228,16 @@ local function hdt_execute(killer, killerHRP)
             return
         end
         
-        -- Calculate direction to target
         local toTarget = (killerHRP.Position - root.Position)
         local dist = toTarget.Magnitude
         
         if dist > 1 then
-            -- Pull toward target using BodyVelocity
             local horiz = Vector3.new(toTarget.X, 0, toTarget.Z)
             if horiz.Magnitude > 0.01 then
                 local dir = horiz.Unit
                 bv.Velocity = Vector3.new(dir.X * speed, bv.Velocity.Y, dir.Z * speed)
             end
             
-            -- Face the killer if enabled
             if guestCfg.hdtFaceKiller then
                 local faceDir = Vector3.new(
                     killerHRP.Position.X - root.Position.X,
@@ -5146,7 +5251,6 @@ local function hdt_execute(killer, killerHRP)
                 end
             end
         else
-            -- Close enough, stop pulling
             bv.Velocity = Vector3.new(0, bv.Velocity.Y, 0)
             if guestCfg.hdtFaceKiller then
                 local faceDir = Vector3.new(
@@ -5162,7 +5266,6 @@ local function hdt_execute(killer, killerHRP)
         end
     end)
     
-    -- Safety timeout
     task.delay(duration + 0.5, function()
         if hdt.debounce then
             hdt.cleanup()
@@ -5182,14 +5285,12 @@ function hdt.cleanup()
         local root = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
         
-        -- Remove BodyVelocity
         if root then
             local bv = root:FindFirstChildWhichIsA("BodyVelocity")
             if bv then bv:Destroy() end
             root.AssemblyLinearVelocity = Vector3.zero
         end
         
-        -- Restore values
         if hum then
             if hdt.origWalkSpeed then
                 hum.WalkSpeed = hdt.origWalkSpeed
@@ -5227,7 +5328,6 @@ local function hdt_setupBlockDetection()
         if not animator then return end
         hdt.animator = animator
         
-        -- Watch for block animation playing
         local function checkBlockAnimation()
             if not guestCfg.hdtEnabled then return end
             if not animator then return end
@@ -5249,14 +5349,12 @@ local function hdt_setupBlockDetection()
             end
         end
         
-        -- Check every frame
         svc.Run.RenderStepped:Connect(function()
             pcall(checkBlockAnimation)
         end)
     end)
 end
 
--- Also check if Better Detection (AntiFlick) is active and trigger HDT from it
 local function hdt_setupAntiFlickDetection()
     task.spawn(function()
         while true do
@@ -5274,7 +5372,6 @@ local function hdt_setupAntiFlickDetection()
                 continue 
             end
             
-            -- Look for AntiFlickZone parts near the player
             for _, part in ipairs(svc.WS:GetDescendants()) do
                 if part:IsA("BasePart") and part.Name == "AntiFlickZone" then
                     if (part.Position - myRoot.Position).Magnitude <= guestCfg.hdtRange then
@@ -5347,10 +5444,10 @@ secHDT:Toggle({
     Title = "Enable HDT",
     Description = "Pulls you into the killer when you block",
     Type = "Checkbox",
+    Flag = "hdtEnabled",
     Default = guestCfg.hdtEnabled,
     Callback = function(v)
         guestCfg.hdtEnabled = v
-        saveCfg()
         if not v and hdt.debounce then hdt.cleanup() end
     end
 })
@@ -5358,44 +5455,44 @@ secHDT:Toggle({
 secHDT:Slider({
     Title = "Pull Speed",
     Description = "How fast you get pulled",
+    Flag = "hdtSpeed",
     Step = 0.1,
     Value = { Min = 1, Max = 20, Default = guestCfg.hdtSpeed },
     Callback = function(v)
         guestCfg.hdtSpeed = v
-        saveCfg()
     end
 })
 
 secHDT:Slider({
     Title = "Pull Duration (s)",
     Description = "How long the pull lasts",
+    Flag = "hdtDuration",
     Step = 0.1,
     Value = { Min = 0.5, Max = 3.0, Default = guestCfg.hdtDuration },
     Callback = function(v)
         guestCfg.hdtDuration = v
-        saveCfg()
     end
 })
 
 secHDT:Slider({
     Title = "Detection Range",
     Description = "How far to look for killers",
+    Flag = "hdtRange",
     Step = 1,
     Value = { Min = 3, Max = 20, Default = guestCfg.hdtRange },
     Callback = function(v)
         guestCfg.hdtRange = v
-        saveCfg()
     end
 })
 
 secHDT:Slider({
     Title = "Delay Before Pull (s)",
     Description = "Delay before starting the pull",
+    Flag = "hdtDelay",
     Step = 0.05,
     Value = { Min = 0, Max = 0.5, Default = guestCfg.hdtDelay },
     Callback = function(v)
         guestCfg.hdtDelay = v
-        saveCfg()
     end
 })
 
@@ -5403,10 +5500,10 @@ secHDT:Toggle({
     Title = "Face Killer",
     Description = "Automatically face the killer while pulling",
     Type = "Checkbox",
+    Flag = "hdtFaceKiller",
     Default = guestCfg.hdtFaceKiller,
     Callback = function(v)
         guestCfg.hdtFaceKiller = v
-        saveCfg()
     end
 })
 
@@ -5414,10 +5511,10 @@ secHDT:Toggle({
     Title = "Show Detection Range",
     Description = "Visual indicator of your HDT range",
     Type = "Checkbox",
+    Flag = "hdtShowRange",
     Default = guestCfg.hdtShowRange,
     Callback = function(v)
         guestCfg.hdtShowRange = v
-        saveCfg()
         if not v and hdt.rangePart then
             hdt.rangePart:Destroy()
             hdt.rangePart = nil
@@ -5483,7 +5580,6 @@ secHDT:Button({
             hdt.rangePart:Destroy()
             hdt.rangePart = nil
         end
-        saveCfg()
         tabGuestHDT:Destroy()
         ui:Notify({
             Title = "HDT Unloaded",
@@ -5504,40 +5600,23 @@ end -- tabGuestHDT
 do -- tabGuestBetter
 local tabGuestBetter = win:Tab({ Title = "Guest Detect", Icon = "search" })
 
--- Load config
-local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
-local guestCfg = {}
-pcall(function()
-    if fs.hasFile(GUEST_CONFIG_PATH) then
-        local data = fs.read(GUEST_CONFIG_PATH)
-        if data and #data > 0 then
-            local decoded = svc.Http:JSONDecode(data)
-            if decoded and type(decoded) == "table" then
-                for k, v in pairs(decoded) do guestCfg[k] = v end
-            end
-        end
-    end
-end)
-
-guestCfg.betterDetectionEnabled = guestCfg.betterDetectionEnabled or false
-guestCfg.betterDetectionX = guestCfg.betterDetectionX or 3
-guestCfg.betterDetectionY = guestCfg.betterDetectionY or 2.5
-guestCfg.betterDetectionZ = guestCfg.betterDetectionZ or 4
-guestCfg.betterDetectionMultiplier = guestCfg.betterDetectionMultiplier or 2.4
-guestCfg.betterDetectionSegments = guestCfg.betterDetectionSegments or 14
-guestCfg.betterStartDist = guestCfg.betterStartDist or 2.2
-guestCfg.betterStepDist = guestCfg.betterStepDist or 0.05
-guestCfg.betterPreDelay = guestCfg.betterPreDelay or 0.15
-guestCfg.betterStagger = guestCfg.betterStagger or 0.03
-guestCfg.betterPredForward = guestCfg.betterPredForward or 1.1
-guestCfg.betterPredTurn = guestCfg.betterPredTurn or 1.2
-
-local function saveCfg()
-    pcall(function()
-        if not fs.hasFolder("betrayalhub") then fs.makeFolder("betrayalhub") end
-        fs.write(GUEST_CONFIG_PATH, svc.Http:JSONEncode(guestCfg))
-    end)
-end
+local guestCfg = {
+    betterDetectionEnabled = false,
+    betterDetectionX = 3,
+    betterDetectionY = 2.5,
+    betterDetectionZ = 4,
+    betterDetectionMultiplier = 2.4,
+    betterDetectionSegments = 14,
+    betterStartDist = 2.2,
+    betterStepDist = 0.05,
+    betterPreDelay = 0.15,
+    betterStagger = 0.03,
+    betterPredForward = 1.1,
+    betterPredTurn = 1.2,
+    blockDelay = 0,
+    autoPunchOn = false,
+    autoPunchDelay = 0.3,
+}
 
 -- BETTER DETECTION STATE
 local bd = { remote = nil, killerState = {} }
@@ -5716,7 +5795,7 @@ local function bd_setupHook()
             local hrp = killer:FindFirstChild("HumanoidRootPart")
             if hrp then
                 local d = (hrp.Position - root.Position).Magnitude
-                if d < bd2 and d <= guestCfg.detectionRange then
+                if d < bd2 and d <= 20 then -- Use default detection range
                     bd2 = d; best = killer
                 end
             end
@@ -5734,41 +5813,41 @@ task.spawn(bd_setupHook)
 
 local secBetter = tabGuestBetter:Section({ Title = "Better Detection", Opened = true })
 
-secBetter:Toggle({ Title="Enable Better Detection", Type="Checkbox", Default=guestCfg.betterDetectionEnabled,
-    Callback=function(v) guestCfg.betterDetectionEnabled=v; saveCfg() end })
+secBetter:Toggle({ Title="Enable Better Detection", Type="Checkbox", Flag="betterDetectionEnabled", Default=guestCfg.betterDetectionEnabled,
+    Callback=function(v) guestCfg.betterDetectionEnabled=v end })
 
-secBetter:Input({ Title="Hitbox X", Placeholder=tostring(guestCfg.betterDetectionX),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionX=n; saveCfg() end end })
+secBetter:Input({ Title="Hitbox X", Flag="betterDetectionX", Placeholder=tostring(guestCfg.betterDetectionX),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionX=n end end })
 
-secBetter:Input({ Title="Hitbox Y", Placeholder=tostring(guestCfg.betterDetectionY),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionY=n; saveCfg() end end })
+secBetter:Input({ Title="Hitbox Y", Flag="betterDetectionY", Placeholder=tostring(guestCfg.betterDetectionY),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionY=n end end })
 
-secBetter:Input({ Title="Hitbox Z (forward)", Placeholder=tostring(guestCfg.betterDetectionZ),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionZ=n; saveCfg() end end })
+secBetter:Input({ Title="Hitbox Z (forward)", Flag="betterDetectionZ", Placeholder=tostring(guestCfg.betterDetectionZ),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionZ=n end end })
 
-secBetter:Input({ Title="Multiplier", Placeholder=tostring(guestCfg.betterDetectionMultiplier),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionMultiplier=n; saveCfg() end end })
+secBetter:Input({ Title="Multiplier", Flag="betterDetectionMultiplier", Placeholder=tostring(guestCfg.betterDetectionMultiplier),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterDetectionMultiplier=n end end })
 
-secBetter:Input({ Title="Segments", Placeholder=tostring(guestCfg.betterDetectionSegments),
-    Callback=function(v) local n=tonumber(v); if n then n=math.max(1,math.floor(n)); guestCfg.betterDetectionSegments=n; saveCfg() end end })
+secBetter:Input({ Title="Segments", Flag="betterDetectionSegments", Placeholder=tostring(guestCfg.betterDetectionSegments),
+    Callback=function(v) local n=tonumber(v); if n then n=math.max(1,math.floor(n)); guestCfg.betterDetectionSegments=n end end })
 
-secBetter:Input({ Title="Start Distance", Placeholder=tostring(guestCfg.betterStartDist),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterStartDist=n; saveCfg() end end })
+secBetter:Input({ Title="Start Distance", Flag="betterStartDist", Placeholder=tostring(guestCfg.betterStartDist),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterStartDist=n end end })
 
-secBetter:Input({ Title="Step Distance", Placeholder=tostring(guestCfg.betterStepDist),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterStepDist=n; saveCfg() end end })
+secBetter:Input({ Title="Step Distance", Flag="betterStepDist", Placeholder=tostring(guestCfg.betterStepDist),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterStepDist=n end end })
 
-secBetter:Input({ Title="Pre-Delay (s)", Placeholder=tostring(guestCfg.betterPreDelay),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterPreDelay=n; saveCfg() end end })
+secBetter:Input({ Title="Pre-Delay (s)", Flag="betterPreDelay", Placeholder=tostring(guestCfg.betterPreDelay),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterPreDelay=n end end })
 
-secBetter:Input({ Title="Stagger (s)", Placeholder=tostring(guestCfg.betterStagger),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterStagger=n; saveCfg() end end })
+secBetter:Input({ Title="Stagger (s)", Flag="betterStagger", Placeholder=tostring(guestCfg.betterStagger),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterStagger=n end end })
 
-secBetter:Input({ Title="Prediction Forward", Placeholder=tostring(guestCfg.betterPredForward),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterPredForward=n; saveCfg() end end })
+secBetter:Input({ Title="Prediction Forward", Flag="betterPredForward", Placeholder=tostring(guestCfg.betterPredForward),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterPredForward=n end end })
 
-secBetter:Input({ Title="Prediction Turn", Placeholder=tostring(guestCfg.betterPredTurn),
-    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterPredTurn=n; saveCfg() end end })
+secBetter:Input({ Title="Prediction Turn", Flag="betterPredTurn", Placeholder=tostring(guestCfg.betterPredTurn),
+    Callback=function(v) local n=tonumber(v); if n then guestCfg.betterPredTurn=n end end })
 
 secBetter:Button({ Title="Unload Better Detection", Callback=function()
     guestCfg.betterDetectionEnabled = false
@@ -5788,37 +5867,17 @@ end -- tabGuestBetter
 do -- tabGuestLine
 local tabGuestLine = win:Tab({ Title = "Guest Line", Icon = "minus" })
 
--- Load config
-local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
-local guestCfg = {}
-pcall(function()
-    if fs.hasFile(GUEST_CONFIG_PATH) then
-        local data = fs.read(GUEST_CONFIG_PATH)
-        if data and #data > 0 then
-            local decoded = svc.Http:JSONDecode(data)
-            if decoded and type(decoded) == "table" then
-                for k, v in pairs(decoded) do guestCfg[k] = v end
-            end
-        end
-    end
-end)
-
-guestCfg.lineBlockEnabled = guestCfg.lineBlockEnabled or false
-guestCfg.lineBlockLength = guestCfg.lineBlockLength or 15
-guestCfg.lineBlockRadius = guestCfg.lineBlockRadius or 1.5
-guestCfg.lineBlockDelay = guestCfg.lineBlockDelay or 0.05
-guestCfg.lineBlockFacingDuration = guestCfg.lineBlockFacingDuration or 0.1
-guestCfg.lineBlockMinDot = guestCfg.lineBlockMinDot or 0.5
-guestCfg.blockCooldown = guestCfg.blockCooldown or 0.35
-guestCfg.autoPunchOn = guestCfg.autoPunchOn or false
-guestCfg.autoPunchDelay = guestCfg.autoPunchDelay or 0.3
-
-local function saveCfg()
-    pcall(function()
-        if not fs.hasFolder("betrayalhub") then fs.makeFolder("betrayalhub") end
-        fs.write(GUEST_CONFIG_PATH, svc.Http:JSONEncode(guestCfg))
-    end)
-end
+local guestCfg = {
+    lineBlockEnabled = false,
+    lineBlockLength = 15,
+    lineBlockRadius = 1.5,
+    lineBlockDelay = 0.05,
+    lineBlockFacingDuration = 0.1,
+    lineBlockMinDot = 0.5,
+    blockCooldown = 0.35,
+    autoPunchOn = false,
+    autoPunchDelay = 0.3,
+}
 
 -- LINE BLOCK STATE
 local line = {
@@ -6038,23 +6097,23 @@ svc.Run.RenderStepped:Connect(line_update)
 
 local secLine = tabGuestLine:Section({ Title = "Line Block", Opened = true })
 
-secLine:Toggle({ Title="Enable Lineblock", Type="Checkbox", Default=guestCfg.lineBlockEnabled,
-    Callback=function(v) guestCfg.lineBlockEnabled=v; saveCfg() end })
+secLine:Toggle({ Title="Enable Lineblock", Type="Checkbox", Flag="lineBlockEnabled", Default=guestCfg.lineBlockEnabled,
+    Callback=function(v) guestCfg.lineBlockEnabled=v end })
 
-secLine:Slider({ Title="Line Length", Step=1, Value={Min=2,Max=40,Default=guestCfg.lineBlockLength},
-    Callback=function(v) guestCfg.lineBlockLength=v; saveCfg() end })
+secLine:Slider({ Title="Line Length", Flag="lineBlockLength", Step=1, Value={Min=2,Max=40,Default=guestCfg.lineBlockLength},
+    Callback=function(v) guestCfg.lineBlockLength=v end })
 
-secLine:Slider({ Title="Line Radius", Step=0.5, Value={Min=0.5,Max=10,Default=guestCfg.lineBlockRadius},
-    Callback=function(v) guestCfg.lineBlockRadius=v; saveCfg() end })
+secLine:Slider({ Title="Line Radius", Flag="lineBlockRadius", Step=0.5, Value={Min=0.5,Max=10,Default=guestCfg.lineBlockRadius},
+    Callback=function(v) guestCfg.lineBlockRadius=v end })
 
-secLine:Slider({ Title="Block Delay (x0.05s)", Step=1, Value={Min=0,Max=20,Default=math.floor(guestCfg.lineBlockDelay/0.05+0.5)},
-    Callback=function(v) guestCfg.lineBlockDelay=v*0.05; saveCfg() end })
+secLine:Slider({ Title="Block Delay (x0.05s)", Flag="lineBlockDelay", Step=1, Value={Min=0,Max=20,Default=math.floor(guestCfg.lineBlockDelay/0.05+0.5)},
+    Callback=function(v) guestCfg.lineBlockDelay=v*0.05 end })
 
-secLine:Slider({ Title="Anti-Bait Hold (x0.01s)", Step=1, Value={Min=0,Max=50,Default=math.floor(guestCfg.lineBlockFacingDuration/0.01+0.5)},
-    Callback=function(v) guestCfg.lineBlockFacingDuration=v*0.01; saveCfg() end })
+secLine:Slider({ Title="Anti-Bait Hold (x0.01s)", Flag="lineBlockFacingDuration", Step=1, Value={Min=0,Max=50,Default=math.floor(guestCfg.lineBlockFacingDuration/0.01+0.5)},
+    Callback=function(v) guestCfg.lineBlockFacingDuration=v*0.01 end })
 
-secLine:Slider({ Title="Facing Sensitivity", Step=1, Value={Min=1,Max=10,Default=math.floor(guestCfg.lineBlockMinDot*10+0.5)},
-    Callback=function(v) guestCfg.lineBlockMinDot=v/10; saveCfg() end })
+secLine:Slider({ Title="Facing Sensitivity", Flag="lineBlockMinDot", Step=1, Value={Min=1,Max=10,Default=math.floor(guestCfg.lineBlockMinDot*10+0.5)},
+    Callback=function(v) guestCfg.lineBlockMinDot=v/10 end })
 
 secLine:Paragraph({ Title="Color Guide",
     Content="White = idle  |  Yellow = punch anim or sound detected  |  Red = you're on the line (block fires)" })
@@ -6079,34 +6138,14 @@ end -- tabGuestLine
 do -- tabGuestMobility
 local tabGuestMobility = win:Tab({ Title = "Guest Mobility", Icon = "zap" })
 
--- Load config
-local GUEST_CONFIG_PATH = "betrayalhub/guest1337_config.json"
-local guestCfg = {}
-pcall(function()
-    if fs.hasFile(GUEST_CONFIG_PATH) then
-        local data = fs.read(GUEST_CONFIG_PATH)
-        if data and #data > 0 then
-            local decoded = svc.Http:JSONDecode(data)
-            if decoded and type(decoded) == "table" then
-                for k, v in pairs(decoded) do guestCfg[k] = v end
-            end
-        end
-    end
-end)
-
-guestCfg.punchMobilityEnabled = guestCfg.punchMobilityEnabled or false
-guestCfg.lungeBoostEnabled = guestCfg.lungeBoostEnabled or false
-guestCfg.lungeMultiplier = guestCfg.lungeMultiplier or 1.0
-guestCfg.chargeControlEnabled = guestCfg.chargeControlEnabled or false
-guestCfg.chargeSpeedLimit = guestCfg.chargeSpeedLimit or 12
-guestCfg.chargeSpeedCapEnabled = guestCfg.chargeSpeedCapEnabled or false
-
-local function saveCfg()
-    pcall(function()
-        if not fs.hasFolder("betrayalhub") then fs.makeFolder("betrayalhub") end
-        fs.write(GUEST_CONFIG_PATH, svc.Http:JSONEncode(guestCfg))
-    end)
-end
+local guestCfg = {
+    punchMobilityEnabled = false,
+    lungeBoostEnabled = false,
+    lungeMultiplier = 1.0,
+    chargeControlEnabled = false,
+    chargeSpeedLimit = 12,
+    chargeSpeedCapEnabled = false,
+}
 
 -- MOBILITY STATE
 local mob = {
@@ -6342,23 +6381,23 @@ if guestCfg.punchMobilityEnabled then mob_startPunchOverride() end
 
 local secMob = tabGuestMobility:Section({ Title = "Punch Mobility", Opened = true })
 
-secMob:Toggle({ Title="Enable Punch Mobility", Type="Checkbox", Default=guestCfg.punchMobilityEnabled,
-    Callback=function(v) guestCfg.punchMobilityEnabled=v; saveCfg(); if v then mob_startPunchOverride() else mob_stopPunchOverride() end end })
+secMob:Toggle({ Title="Enable Punch Mobility", Type="Checkbox", Flag="punchMobilityEnabled", Default=guestCfg.punchMobilityEnabled,
+    Callback=function(v) guestCfg.punchMobilityEnabled=v; if v then mob_startPunchOverride() else mob_stopPunchOverride() end end })
 
-secMob:Toggle({ Title="Lunge Boost", Type="Checkbox", Default=guestCfg.lungeBoostEnabled,
-    Callback=function(v) guestCfg.lungeBoostEnabled=v; saveCfg(); if not v then if mob.lungeThread then task.cancel(mob.lungeThread); mob.lungeThread=nil end; pcall(function() svc.Run:UnbindFromRenderStep("GuestLungeBoost") end); mob.lungeActive=false end end })
+secMob:Toggle({ Title="Lunge Boost", Type="Checkbox", Flag="lungeBoostEnabled", Default=guestCfg.lungeBoostEnabled,
+    Callback=function(v) guestCfg.lungeBoostEnabled=v; if not v then if mob.lungeThread then task.cancel(mob.lungeThread); mob.lungeThread=nil end; pcall(function() svc.Run:UnbindFromRenderStep("GuestLungeBoost") end); mob.lungeActive=false end end })
 
-secMob:Slider({ Title="Lunge Multiplier", Step=0.1, Value={Min=0.5,Max=5,Default=guestCfg.lungeMultiplier},
-    Callback=function(v) guestCfg.lungeMultiplier=v; saveCfg() end })
+secMob:Slider({ Title="Lunge Multiplier", Flag="lungeMultiplier", Step=0.1, Value={Min=0.5,Max=5,Default=guestCfg.lungeMultiplier},
+    Callback=function(v) guestCfg.lungeMultiplier=v end })
 
-secMob:Toggle({ Title="Charge Control", Type="Checkbox", Default=guestCfg.chargeControlEnabled,
-    Callback=function(v) guestCfg.chargeControlEnabled=v; saveCfg(); if not v then mob_stopLock() end end })
+secMob:Toggle({ Title="Charge Control", Type="Checkbox", Flag="chargeControlEnabled", Default=guestCfg.chargeControlEnabled,
+    Callback=function(v) guestCfg.chargeControlEnabled=v; if not v then mob_stopLock() end end })
 
-secMob:Slider({ Title="Charge Speed Limit", Step=1, Value={Min=1,Max=50,Default=guestCfg.chargeSpeedLimit},
-    Callback=function(v) guestCfg.chargeSpeedLimit=v; saveCfg() end })
+secMob:Slider({ Title="Charge Speed Limit", Flag="chargeSpeedLimit", Step=1, Value={Min=1,Max=50,Default=guestCfg.chargeSpeedLimit},
+    Callback=function(v) guestCfg.chargeSpeedLimit=v end })
 
-secMob:Toggle({ Title="Charge Speed Cap", Type="Checkbox", Default=guestCfg.chargeSpeedCapEnabled,
-    Callback=function(v) guestCfg.chargeSpeedCapEnabled=v; saveCfg(); if mob.isCharging and v then mob_startChargeCap() elseif not v then mob_stopChargeCap() end end })
+secMob:Toggle({ Title="Charge Speed Cap", Type="Checkbox", Flag="chargeSpeedCapEnabled", Default=guestCfg.chargeSpeedCapEnabled,
+    Callback=function(v) guestCfg.chargeSpeedCapEnabled=v; if mob.isCharging and v then mob_startChargeCap() elseif not v then mob_stopChargeCap() end end })
 
 secMob:Button({ Title="Unload Punch Mobility", Callback=function()
     guestCfg.punchMobilityEnabled = false
@@ -6388,92 +6427,6 @@ secUIFunctions:Button({ Title = "Close UI", Callback = function()
         if not ok then pcall(function() win:Close() end) end
     end)
 end })
-
--- CONFIG SHARE
-local secConfigShare = tabInterface:Section({ Title = "Config Share", Opened = true })
-
-local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
-local function b64Encode(str)
-    local result = {}
-    local bytes = {string.byte(str, 1, #str)}
-    for i = 1, #bytes, 3 do
-        local b1,b2,b3 = bytes[i] or 0, bytes[i+1] or 0, bytes[i+2] or 0
-        local n = b1*65536 + b2*256 + b3
-        result[#result+1] = B64CHARS:sub(math.floor(n/262144)%64+1, math.floor(n/262144)%64+1)
-        result[#result+1] = B64CHARS:sub(math.floor(n/4096)%64+1, math.floor(n/4096)%64+1)
-        result[#result+1] = bytes[i+1] and B64CHARS:sub(math.floor(n/64)%64+1, math.floor(n/64)%64+1) or "="
-        result[#result+1] = bytes[i+2] and B64CHARS:sub(n%64+1, n%64+1) or "="
-    end
-    return table.concat(result)
-end
-
-local function b64Decode(str)
-    local lookup = {}; for i=1,#B64CHARS do lookup[B64CHARS:sub(i,i)] = i-1 end
-    local bytes = {}
-    for i = 1, #str, 4 do
-        local c1 = lookup[str:sub(i,i)] or 0; local c2 = lookup[str:sub(i+1,i+1)] or 0
-        local c3 = lookup[str:sub(i+2,i+2)]; local c4 = lookup[str:sub(i+3,i+3)]
-        local n = c1*262144 + c2*4096 + (c3 or 0)*64 + (c4 or 0)
-        bytes[#bytes+1] = string.char(math.floor(n/65536)%256)
-        if c3 then bytes[#bytes+1] = string.char(math.floor(n/256)%256) end
-        if c4 then bytes[#bytes+1] = string.char(n%256) end
-    end
-    return table.concat(bytes)
-end
-
-local CONFIG_PATH = "WindUI/betrayalhub/config/betrayalhub.json"
-
-secConfigShare:Button({
-    Title = "📋 Copy Config",
-    Icon = "copy",
-    Callback = function()
-        pcall(function()
-            local ok,e = pcall(function()
-                local raw = readfile(CONFIG_PATH)
-                setclipboard("v1prw_full:"..b64Encode(raw))
-                print("[betrayalhub] Config copied!")
-            end)
-            if not ok then print("[betrayalhub] Copy failed: "..tostring(e)) end
-        end)
-    end
-})
-
-local importStr = ""
-
-secConfigShare:Input({
-    Title = "Paste Config String",
-    Icon = "clipboard",
-    Placeholder = "v1prw_full:...",
-    Callback = function(v) pcall(function() importStr = v end) end
-})
-
-secConfigShare:Button({
-    Title = "🔄 Load Config",
-    Icon = "download",
-    Callback = function()
-        pcall(function()
-            if importStr == "" then print("[betrayalhub] Paste a config string first"); return end
-            if importStr:match("^v1prw_full:") then
-                local ok,e = pcall(function()
-                    local d = b64Decode(importStr:sub(12))
-                    writefile(CONFIG_PATH, d)
-                    v1prConfig:Load()
-                    applyConfigFromFlags()
-                end)
-                if ok then print("[betrayalhub] Config loaded!") else print("[betrayalhub] Load failed: "..tostring(e)) end
-            else
-                print("[betrayalhub] Must start with v1prw_full:")
-            end
-        end)
-    end
-})
-
-secConfigShare:Button({
-    Title = "💾 Save Config",
-    Icon = "save",
-    Callback = function() pcall(function() v1prConfig:Save(); print("[betrayalhub] Config saved") end) end
-})
 
 end -- interface tab
 
@@ -6555,31 +6508,24 @@ function applyConfigFromFlags()
         -- HDT flags
         if win.Flags.hdtEnabled ~= nil then 
             guestCfg.hdtEnabled = win.Flags.hdtEnabled
-            saveCfg()
         end
         if type(win.Flags.hdtSpeed)=="number" then 
             guestCfg.hdtSpeed = win.Flags.hdtSpeed
-            saveCfg()
         end
         if type(win.Flags.hdtDuration)=="number" then 
             guestCfg.hdtDuration = win.Flags.hdtDuration
-            saveCfg()
         end
         if type(win.Flags.hdtRange)=="number" then 
             guestCfg.hdtRange = win.Flags.hdtRange
-            saveCfg()
         end
         if type(win.Flags.hdtDelay)=="number" then 
             guestCfg.hdtDelay = win.Flags.hdtDelay
-            saveCfg()
         end
         if win.Flags.hdtFaceKiller ~= nil then 
             guestCfg.hdtFaceKiller = win.Flags.hdtFaceKiller
-            saveCfg()
         end
         if win.Flags.hdtShowRange ~= nil then 
             guestCfg.hdtShowRange = win.Flags.hdtShowRange
-            saveCfg()
         end
         
         print("[betrayalhub] All features restored from config!")
