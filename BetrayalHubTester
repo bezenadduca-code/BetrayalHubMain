@@ -1,4 +1,4 @@
--- BetrayalHub - Complete Final Version (WindUI Config)
+-- BetrayalHub - Complete Final Version
 
 print("betrayalhub loading...")
 
@@ -776,7 +776,7 @@ secInterface:Dropdown({
     Callback = function(v) pcall(function() timerSide = v; applyTimerPos() end) end
 })
 
--- Disable Jump Button
+-- Disable Jump Button - FIXED
 local jumpDisabled = false
 local jumpBackup = nil
 
@@ -789,26 +789,31 @@ local function toggleJump(enabled)
         local frame = touchGui:FindFirstChild("TouchControlFrame")
         if not frame then return end
         
+        -- Also disable jump power on humanoid
         local char = lp.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         
         if enabled then
+            -- Delete jump button
             local jump = frame:FindFirstChild("JumpButton")
             if jump then
                 jumpBackup = jump:Clone()
                 jump:Destroy()
                 print("[betrayalhub] Jump button disabled!")
             end
+            -- Set jump power to 0 to prevent keyboard jumping too
             if hum then
                 hum.JumpPower = 0
                 hum.Jump = false
             end
         else
+            -- Restore jump button
             if jumpBackup then
                 local newJump = jumpBackup:Clone()
                 newJump.Parent = frame
                 print("[betrayalhub] Jump button enabled!")
             end
+            -- Restore jump power
             if hum then
                 hum.JumpPower = 50
             end
@@ -832,6 +837,7 @@ lp.CharacterAdded:Connect(function(character)
             if spoofActive then spoofStart() end
             applyTimerPos()
             if jumpDisabled then toggleJump(true) end
+            -- Also reapply jump disable on new character
             if jumpDisabled then
                 local hum = character:FindFirstChildOfClass("Humanoid")
                 if hum then
@@ -843,6 +849,7 @@ lp.CharacterAdded:Connect(function(character)
     end)
 end)
 
+-- Also connect to Humanoid on existing character
 task.delay(0.5, function()
     pcall(function()
         if jumpDisabled then
@@ -929,7 +936,9 @@ do
             if hum then hum.WalkSpeed = emState.spd; hum.JumpPower = emState.jump end
         end
         if emState.track then pcall(function() emState.track:Stop() end); emState.track = nil end
-    end    local function emPlay(mod)
+    end
+
+    local function emPlay(mod)
         if emState.emoting then emStop(); task.wait(0.1) end
         local ch   = lp.Character; if not ch then return end
         local hum  = ch:FindFirstChildOfClass("Humanoid")
@@ -1144,6 +1153,7 @@ local stam = {
     thread  = nil,
 }
 
+-- Cached module + original Init for restore
 local _stamMod = nil
 local _stamOrigInit = nil
 
@@ -1160,6 +1170,7 @@ local function stamIsKiller()
     return kf and ch:IsDescendantOf(kf)
 end
 
+-- Patch Init so any internal re-init can't re-enable stamina loss
 local function stamPatchInit(m)
     if not m then return end
     m.Init = function(...)
@@ -1234,6 +1245,7 @@ secStamina:Toggle({ Title = "Infinite Stamina", Type = "Checkbox", Flag = "stamN
     end
 })
 
+-- Auto-enable infinite stamina on load using goku hub method
 pcall(function()
     local m = stamModule()
     if m then
@@ -2224,14 +2236,359 @@ catSection:Toggle({ Title="Items", Type="Checkbox", Flag="espItems", Default=esp
 catSection:Toggle({ Title="Structures", Type="Checkbox", Flag="espStructures", Default=esp.showStructures,
     Callback=function(on) pcall(function() esp.showStructures=on; if esp.enabled then espClearAll(); espStart() end end) end })
 
--- Groundbulb & Vine toggle moved to its own section below
-catSection:Toggle({ Title="Groundbulb & Vine", Type="Checkbox", Flag="gvEspOn", Default=false,
-    Callback=function(on)
+-- ============================================================
+-- GROUNDBULB & VINE ESP (PURPLE - OVERRIDES GAME HIGHLIGHTS - WORKING)
+-- ============================================================
+
+local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine Settings", Opened = false })
+
+-- Configuration
+local gvConfig = {
+    ShowGroundbulb = true,
+    ShowVine = true,
+    HighlightColor = Color3.fromRGB(170, 0, 255), -- PURPLE
+    FillTransparency = 0.4,
+    OutlineTransparency = 0.1,
+    ScanRate = 0.5,
+}
+
+-- State
+local gv = {
+    enabled = false,
+    tracked = {},
+    objects = {},
+    thread = nil,
+    ticker = 0,
+    listenerConn = nil,
+    heartbeatConn = nil,
+}
+
+-- Get top part of model
+local function gvGetTopPart(model)
+    local highestPart = model.PrimaryPart
+    local highestY = highestPart and highestPart.Position.Y or -math.huge
+
+    for _, descendant in ipairs(model:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            if descendant.Name:find("Flower") or descendant.Position.Y > highestY then
+                highestY = descendant.Position.Y
+                highestPart = descendant
+            end
+        end
+    end
+    return highestPart
+end
+
+-- Highlight entity (PURPLE - overrides game highlights)
+local function gvHighlightEntity(model, displayName)
+    if not model or not model:IsA("Model") then return end
+    if gv.tracked[model] then return end
+
+    -- REMOVE ALL existing game highlights (override)
+    for _, child in ipairs(model:GetChildren()) do
+        if child:IsA("Highlight") then
+            child:Destroy()
+        end
+    end
+
+    local existingHl = model:FindFirstChild("GvHighlight")
+    if existingHl then existingHl:Destroy() end
+    local existingBb = model:FindFirstChild("GvTag")
+    if existingBb then existingBb:Destroy() end
+
+    local adornPart = gvGetTopPart(model)
+    if not adornPart then
+        for _, descendant in ipairs(model:GetDescendants()) do
+            if descendant:IsA("BasePart") and descendant.Name ~= "Handle" then
+                adornPart = descendant
+                break
+            end
+        end
+    end
+
+    if not adornPart then return end
+
+    if not model.PrimaryPart then
+        model.PrimaryPart = adornPart
+    end
+
+    -- PURPLE highlight
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "GvHighlight"
+    highlight.Adornee = model
+    highlight.FillColor = gvConfig.HighlightColor
+    highlight.FillTransparency = gvConfig.FillTransparency
+    highlight.OutlineColor = gvConfig.HighlightColor
+    highlight.OutlineTransparency = gvConfig.OutlineTransparency
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Enabled = true
+    highlight.Parent = model
+
+    -- Billboard with LOWER text position
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "GvTag"
+    billboard.Size = UDim2.new(0, 180, 0, 28)
+    billboard.Adornee = adornPart
+    billboard.StudsOffset = Vector3.new(0, 0.5, 0) -- Lowered text
+    billboard.MaxDistance = 150
+    billboard.AlwaysOnTop = true
+    billboard.Parent = model
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = displayName
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextStrokeTransparency = 0.2
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 12 -- Smaller text
+    label.Parent = billboard
+
+    gv.tracked[model] = true
+    gv.objects[model] = {
+        highlight = highlight,
+        billboard = billboard,
+    }
+end
+
+-- Evaluate and highlight
+local function gvEvaluateAndHighlight(child)
+    if not child:IsA("Model") then return end
+
+    local nameLower = child.Name:lower()
+
+    if nameLower == "groundbulbmodel" then
+        if gvConfig.ShowGroundbulb and not gv.tracked[child] then
+            gvHighlightEntity(child, "GroundBulb")
+        end
+    elseif nameLower == "vinemodel" then
+        if gvConfig.ShowVine and not gv.tracked[child] then
+            gvHighlightEntity(child, "Vine")
+        end
+    end
+end
+
+-- Scan for entities
+local function gvScan()
+    if not gv.enabled then return end
+    
+    local map = svc.WS:FindFirstChild("Map")
+    if not map then return end
+    
+    local ingame = map:FindFirstChild("Ingame")
+    if not ingame then return end
+
+    for _, obj in ipairs(ingame:GetDescendants()) do
+        if obj:IsA("Model") then
+            gvEvaluateAndHighlight(obj)
+        end
+    end
+end
+
+-- Cleanup
+local function gvCleanup()
+    for model in pairs(gv.tracked) do
+        if not model or not model.Parent then
+            if gv.objects[model] then
+                pcall(function()
+                    if gv.objects[model].highlight then
+                        gv.objects[model].highlight:Destroy()
+                    end
+                    if gv.objects[model].billboard then
+                        gv.objects[model].billboard:Destroy()
+                    end
+                end)
+                gv.objects[model] = nil
+            end
+            gv.tracked[model] = nil
+        end
+    end
+end
+
+-- Update loop
+local function gvUpdateLoop()
+    gvCleanup()
+    gvScan()
+end
+
+-- Start
+local function gvStart()
+    if gv.thread then return end
+    
+    task.wait(0.5)
+    gvUpdateLoop()
+    
+    gv.ticker = 0
+    gv.heartbeatConn = svc.Run.Heartbeat:Connect(function(dt)
+        if not gv.enabled then
+            gv.heartbeatConn:Disconnect()
+            gv.heartbeatConn = nil
+            gv.thread = nil
+            return
+        end
+        
+        gv.ticker = gv.ticker + dt
+        if gv.ticker >= gvConfig.ScanRate then
+            gv.ticker = 0
+            pcall(gvUpdateLoop)
+        end
+    end)
+    gv.thread = gv.heartbeatConn
+end
+
+-- Stop
+local function gvStop()
+    if gv.heartbeatConn then
+        gv.heartbeatConn:Disconnect()
+        gv.heartbeatConn = nil
+    end
+    gv.thread = nil
+    
+    for model, data in pairs(gv.objects) do
+        pcall(function()
+            if data.highlight then data.highlight:Destroy() end
+            if data.billboard then data.billboard:Destroy() end
+        end)
+    end
+    gv.objects = {}
+    gv.tracked = {}
+end
+
+-- Setup listener for new spawns
+local function gvSetupListener()
+    local map = svc.WS:FindFirstChild("Map")
+    if map then
+        local ingame = map:FindFirstChild("Ingame")
+        if ingame then
+            if gv.listenerConn then
+                gv.listenerConn:Disconnect()
+            end
+            gv.listenerConn = ingame.DescendantAdded:Connect(function(child)
+                if gv.enabled and child:IsA("Model") then
+                    task.wait(0.1)
+                    gvEvaluateAndHighlight(child)
+                end
+            end)
+        end
+    end
+end
+
+-- Keep listener alive
+local function gvKeepListenerAlive()
+    task.spawn(function()
+        while gv.enabled do
+            gvSetupListener()
+            task.wait(2)
+        end
+    end)
+end
+
+-- Handle character respawn
+lp.CharacterAdded:Connect(function()
+    task.wait(2)
+    if gv.enabled then
+        pcall(gvUpdateLoop)
+    end
+end)
+
+-- Replace the toggle in Categories section
+catSection:Toggle({ 
+    Title = "Groundbulb & Vine", 
+    Type = "Checkbox", 
+    Flag = "gvEspOn", 
+    Default = gv.enabled,
+    Callback = function(on)
         pcall(function()
             gv.enabled = on
-            if on then gvStart() else gvStop() end
+            if on then 
+                gvStart()
+                gvKeepListenerAlive()
+            else 
+                gvStop() 
+            end
         end)
-    end })
+    end 
+})
+
+-- UI Elements
+secGVEsp:Toggle({
+    Title = "Show Groundbulb",
+    Type = "Checkbox",
+    Flag = "gvShowGroundbulb",
+    Default = gvConfig.ShowGroundbulb,
+    Callback = function(on)
+        gvConfig.ShowGroundbulb = on
+        if gv.enabled then
+            pcall(gvUpdateLoop)
+        end
+    end
+})
+
+secGVEsp:Toggle({
+    Title = "Show Vine",
+    Type = "Checkbox",
+    Flag = "gvShowVine",
+    Default = gvConfig.ShowVine,
+    Callback = function(on)
+        gvConfig.ShowVine = on
+        if gv.enabled then
+            pcall(gvUpdateLoop)
+        end
+    end
+})
+
+secGVEsp:Slider({
+    Title = "Scan Rate (seconds)",
+    Description = "How often to scan (lower = faster but more lag)",
+    Flag = "gvScanRate",
+    Step = 0.1,
+    Value = { Min = 0.1, Max = 3.0, Default = gvConfig.ScanRate },
+    Callback = function(v)
+        gvConfig.ScanRate = v
+    end
+})
+
+secGVEsp:Slider({
+    Title = "Highlight Transparency",
+    Flag = "gvTransparency",
+    Step = 0.05,
+    Value = { Min = 0.1, Max = 1.0, Default = gvConfig.FillTransparency },
+    Callback = function(v)
+        gvConfig.FillTransparency = v
+        for model, data in pairs(gv.objects) do
+            if data.highlight and data.highlight.Parent then
+                data.highlight.FillTransparency = v
+            end
+        end
+    end
+})
+
+secGVEsp:Button({
+    Title = "Refresh ESP",
+    Callback = function()
+        if gv.enabled then
+            gvStop()
+            task.wait(0.1)
+            gv.tracked = {}
+            gv.objects = {}
+            gvStart()
+            gvKeepListenerAlive()
+        end
+    end
+})
+
+secGVEsp:Button({
+    Title = "Clear All Highlights",
+    Callback = function()
+        gvStop()
+        gv.tracked = {}
+        gv.objects = {}
+    end
+})
+
+print("[GV ESP] Loaded - Purple highlights, text lowered")
 
 local visSection = tabESP:Section({ Title = "Visual Settings", Opened = true })
 
@@ -2420,311 +2777,6 @@ secMinion:Toggle({ Title="JD Digital Footprints", Type="Checkbox", Flag="espPudd
 secMinion:Slider({ Title="Highlight Transparency", Flag="espMinionTrans", Step=0.05, Value={Min=0,Max=1,Default=mset.transparency}, Callback=function(v) pcall(function() mset.transparency=v; updateTransparency() end) end })
 
 secMinion:Button({ Title="Force Rescan", Callback=function() pcall(function() clearTag("pizza"); clearTag("zombie"); clearTag("puddle"); task.wait(0.1); scanPizza(); scanZombie(); scanPuddles() end) end })
-
--- ============================================================
--- GROUNDBULB & VINE ESP (OPTIMIZED - WITH FRAME RATE CONTROL)
--- ============================================================
-
-local secGVEsp = tabESP:Section({ Title = "Groundbulb & Vine Settings", Opened = false })
-
-local gvConfig = {
-    HighlightColor = Color3.fromRGB(170, 0, 255), -- Purple
-    FillTransparency = 0.4,
-    OutlineTransparency = 0.1,
-    ScanRate = 0.5, -- How often to scan (seconds)
-}
-
-local gv = {
-    enabled = false,
-    showGroundbulb = true,
-    showVine = true,
-    tracked = {}, -- Map of objects we're tracking
-    scanThread = nil,
-    highlightObjects = {}, -- For cleanup
-    ticker = 0,
-}
-
--- Clean up all highlights
-local function gvCleanup()
-    for _, data in pairs(gv.highlightObjects) do
-        pcall(function()
-            if data.highlight then data.highlight:Destroy() end
-            if data.billboard then data.billboard:Destroy() end
-        end)
-    end
-    gv.highlightObjects = {}
-    gv.tracked = {}
-end
-
--- Highlight a single entity (OVERRIDES existing game highlights)
-local function gvHighlightEntity(model, displayName)
-    if not model or not model:IsA("Model") then return end
-    if gv.tracked[model] then return end
-    
-    -- Find the top part for billboard attachment
-    local topPart = model.PrimaryPart
-    local topY = topPart and topPart.Position.Y or -math.huge
-    
-    for _, descendant in ipairs(model:GetDescendants()) do
-        if descendant:IsA("BasePart") then
-            if descendant.Name:find("Flower") or descendant.Position.Y > topY then
-                topY = descendant.Position.Y
-                topPart = descendant
-            end
-        end
-    end
-    
-    if not topPart then
-        for _, descendant in ipairs(model:GetDescendants()) do
-            if descendant:IsA("BasePart") and descendant.Name ~= "Handle" then
-                topPart = descendant
-                break
-            end
-        end
-    end
-    
-    if not topPart then return end
-    
-    -- REMOVE any existing game highlights FIRST (override)
-    for _, child in ipairs(model:GetChildren()) do
-        if child:IsA("Highlight") then
-            child:Destroy()
-        end
-    end
-    
-    -- Create our highlight (PURPLE)
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "GvHighlight"
-    highlight.Adornee = model
-    highlight.FillColor = gvConfig.HighlightColor -- Purple
-    highlight.FillTransparency = gvConfig.FillTransparency
-    highlight.OutlineColor = gvConfig.HighlightColor -- Purple
-    highlight.OutlineTransparency = gvConfig.OutlineTransparency
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Enabled = true
-    highlight.Parent = model
-    
-    -- Billboard
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "GvTag"
-    billboard.Size = UDim2.new(0, 180, 0, 28)
-    billboard.Adornee = topPart
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.MaxDistance = 150
-    billboard.AlwaysOnTop = true
-    billboard.Parent = model
-    
-    local label = Instance.new("TextLabel")
-    label.Name = "Label"
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = displayName
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    label.TextStrokeTransparency = 0.2
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 14
-    label.Parent = billboard
-    
-    -- Store for cleanup
-    gv.tracked[model] = true
-    gv.highlightObjects[model] = {
-        highlight = highlight,
-        billboard = billboard,
-    }
-end
-
--- Scan for Vines and Groundbulbs (OPTIMIZED - only runs when needed)
-local function gvScan()
-    if not gv.enabled then return end
-    
-    local map = svc.WS:FindFirstChild("Map")
-    if not map then return end
-    
-    local ingame = map:FindFirstChild("Ingame")
-    if not ingame then return end
-    
-    -- Only scan descendants once and cache results
-    local toProcess = {}
-    
-    for _, obj in ipairs(ingame:GetDescendants()) do
-        if obj:IsA("Model") then
-            local nameLower = obj.Name:lower()
-            if nameLower == "groundbulbmodel" or nameLower == "vinemodel" then
-                if not gv.tracked[obj] then
-                    table.insert(toProcess, {obj = obj, name = nameLower})
-                end
-            end
-        end
-    end
-    
-    -- Process found objects
-    for _, item in ipairs(toProcess) do
-        if item.name == "groundbulbmodel" and gv.showGroundbulb then
-            gvHighlightEntity(item.obj, "GroundBulb")
-        elseif item.name == "vinemodel" and gv.showVine then
-            gvHighlightEntity(item.obj, "Vine")
-        end
-    end
-    
-    -- Cleanup destroyed objects
-    for model in pairs(gv.tracked) do
-        if not model or not model.Parent then
-            if gv.highlightObjects[model] then
-                pcall(function()
-                    if gv.highlightObjects[model].highlight then
-                        gv.highlightObjects[model].highlight:Destroy()
-                    end
-                    if gv.highlightObjects[model].billboard then
-                        gv.highlightObjects[model].billboard:Destroy()
-                    end
-                end)
-                gv.highlightObjects[model] = nil
-            end
-            gv.tracked[model] = nil
-        end
-    end
-end
-
--- Start the scanner (OPTIMIZED - uses throttled heartbeat with frame rate control)
-local function gvStart()
-    if gv.scanThread then return end
-    
-    -- Initial scan
-    task.wait(0.5)
-    gvScan()
-    
-    -- Use throttled heartbeat with configurable scan rate
-    gv.ticker = 0
-    gv.scanThread = svc.Run.Heartbeat:Connect(function(dt)
-        if not gv.enabled then
-            gv.scanThread:Disconnect()
-            gv.scanThread = nil
-            gvCleanup()
-            return
-        end
-        
-        gv.ticker = gv.ticker + dt
-        if gv.ticker >= gvConfig.ScanRate then -- Only scan at the configured rate
-            gv.ticker = 0
-            pcall(gvScan)
-        end
-    end)
-end
-
--- Stop the scanner
-local function gvStop()
-    if gv.scanThread then
-        gv.scanThread:Disconnect()
-        gv.scanThread = nil
-    end
-    gvCleanup()
-end
-
--- Listen for new spawns (optimized - only triggers on new children)
-local function gvSetupListeners()
-    local map = svc.WS:FindFirstChild("Map")
-    if map then
-        local ingame = map:FindFirstChild("Ingame")
-        if ingame then
-            ingame.DescendantAdded:Connect(function(child)
-                if gv.enabled and child:IsA("Model") then
-                    local nameLower = child.Name:lower()
-                    if nameLower == "groundbulbmodel" or nameLower == "vinemodel" then
-                        task.wait(0.1)
-                        pcall(gvScan)
-                    end
-                end
-            end)
-        end
-    end
-end
-
--- Setup listeners
-task.spawn(gvSetupListeners)
-
--- UI Elements
-secGVEsp:Toggle({
-    Title = "Show Groundbulb",
-    Type = "Checkbox",
-    Flag = "gvShowGroundbulb",
-    Default = gv.showGroundbulb,
-    Callback = function(on)
-        gv.showGroundbulb = on
-        if gv.enabled then
-            gvScan()
-        end
-    end
-})
-
-secGVEsp:Toggle({
-    Title = "Show Vine",
-    Type = "Checkbox",
-    Flag = "gvShowVine",
-    Default = gv.showVine,
-    Callback = function(on)
-        gv.showVine = on
-        if gv.enabled then
-            gvScan()
-        end
-    end
-})
-
-secGVEsp:Slider({
-    Title = "Scan Rate (seconds)",
-    Description = "How often to scan for new entities (lower = more performance)",
-    Flag = "gvScanRate",
-    Step = 0.1,
-    Value = { Min = 0.1, Max = 3.0, Default = gvConfig.ScanRate },
-    Callback = function(v)
-        gvConfig.ScanRate = v
-    end
-})
-
-secGVEsp:Slider({
-    Title = "Highlight Transparency",
-    Flag = "gvTransparency",
-    Step = 0.05,
-    Value = { Min = 0.1, Max = 1.0, Default = gvConfig.FillTransparency },
-    Callback = function(v)
-        gvConfig.FillTransparency = v
-        -- Update existing highlights
-        for model, data in pairs(gv.highlightObjects) do
-            if data.highlight and data.highlight.Parent then
-                data.highlight.FillTransparency = v
-            end
-        end
-    end
-})
-
-secGVEsp:Button({
-    Title = "Refresh ESP",
-    Callback = function()
-        if gv.enabled then
-            gvCleanup()
-            gv.tracked = {}
-            task.wait(0.1)
-            gvScan()
-        end
-    end
-})
-
-secGVEsp:Button({
-    Title = "Clear All Highlights",
-    Callback = function()
-        gvCleanup()
-        gv.tracked = {}
-    end
-})
-
-lp.CharacterAdded:Connect(function()
-    task.wait(2)
-    if gv.enabled then
-        gvCleanup()
-        gv.tracked = {}
-        gvScan()
-    end
-end)
 
 end -- tabESP
 
@@ -5085,7 +5137,7 @@ print("[Guest Core] Loaded with auto-restore on new rounds")
 end -- tabGuestCore
 
 -- ============================================================
--- GUEST 1337 - HDT TAB (WORKING IMPLEMENTATION)
+-- GUEST 1337 - HDT TAB (Activates on Block Remote with Cooldown)
 -- ============================================================
 
 do -- tabGuestHDT
@@ -5100,6 +5152,7 @@ local guestCfg = {
     hdtDelay = 0,
     hdtShowRange = false,
     hdtFaceKiller = true,
+    hdtRespectCooldown = true, -- Respect the 27s cooldown
 }
 
 -- HDT STATE
@@ -5114,15 +5167,51 @@ local hdt = {
     origPlatformStand = nil,
     origAutoRotate = nil,
     debounce = false,
-    animator = nil,
+    remote = nil,
+    lastBlockTime = 0,
+    blockCooldownDuration = 27, -- 27 seconds cooldown
 }
 
--- BLOCK ANIMATION IDs
-local blockAnimIds = {
-    "72722244508749",
-    "96959123077498",
-    "95802026624883"
-}
+-- Get the remote event
+local function hdt_getRemote()
+    if hdt.remote then return hdt.remote end
+    pcall(function()
+        hdt.remote = svc.RS:WaitForChild("Modules",10):WaitForChild("Network",10):WaitForChild("Network",10):WaitForChild("RemoteEvent",10)
+    end)
+    return hdt.remote
+end
+
+-- Check if block is ready (no cooldown)
+local function hdt_isBlockReady()
+    -- Check UI cooldown display first (most accurate)
+    local ui = lp:FindFirstChild("PlayerGui")
+    if ui then
+        local m = ui:FindFirstChild("MainUI")
+        if m then
+            local ac = m:FindFirstChild("AbilityContainer")
+            if ac then
+                local bl = ac:FindFirstChild("Block")
+                if bl then
+                    local ct = bl:FindFirstChild("CooldownTime")
+                    if ct and ct:IsA("TextLabel") then
+                        local num = ct.Text:match("[%d%.]+")
+                        if num then
+                            local v = tonumber(num)
+                            if v and v > 0 then
+                                return false -- Still on cooldown
+                            end
+                        end
+                        return true -- No cooldown showing
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Fallback: check time since last block
+    local timeSinceBlock = tick() - hdt.lastBlockTime
+    return timeSinceBlock >= hdt.blockCooldownDuration
+end
 
 -- UTILITY FUNCTIONS
 local function hdt_getRoot()
@@ -5133,14 +5222,6 @@ end
 local function hdt_getHum()
     local c = lp.Character
     return c and c:FindFirstChildOfClass("Humanoid")
-end
-
-local function hdt_getAnimator()
-    local hum = hdt_getHum()
-    if hum then
-        return hum:FindFirstChildOfClass("Animator")
-    end
-    return nil
 end
 
 local function hdt_getTeam(name)
@@ -5184,6 +5265,12 @@ end
 local function hdt_execute(killer, killerHRP)
     if hdt.debounce then return end
     if not killer or not killerHRP or not killerHRP.Parent then return end
+    
+    -- Check if block is ready (respect cooldown)
+    if guestCfg.hdtRespectCooldown and not hdt_isBlockReady() then
+        print("[HDT] ⏳ Block on cooldown, HDT skipped")
+        return
+    end
     
     local char = lp.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -5318,43 +5405,41 @@ function hdt.cleanup()
     print("[HDT] 🛑 HDT stopped")
 end
 
--- DETECT BLOCK ANIMATION
-local function hdt_setupBlockDetection()
-    lp.CharacterAdded:Connect(function(char)
-        task.wait(0.5)
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
-        local animator = hum:FindFirstChildOfClass("Animator")
-        if not animator then return end
-        hdt.animator = animator
+-- DETECT BLOCK REMOTE - This is where HDT activates
+local function hdt_setupRemoteDetection()
+    local remote = hdt_getRemote()
+    if not remote then
+        warn("[HDT] Remote not found - feature disabled")
+        return
+    end
+    
+    remote.OnClientEvent:Connect(function(action, data)
+        if not guestCfg.hdtEnabled then return end
+        if action ~= "UseActorAbility" then return end
+        if typeof(data) ~= "table" or not data[1] then return end
         
-        local function checkBlockAnimation()
-            if not guestCfg.hdtEnabled then return end
-            if not animator then return end
-            
-            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                local animId = tostring(track.Animation and track.Animation.AnimationId or ""):match("%d+")
-                if animId and table.find(blockAnimIds, animId) then
-                    local timePos = 0
-                    pcall(function() timePos = track.TimePosition or 0 end)
-                    if timePos <= 0.12 then
-                        local killer, killerHRP = hdt_findTarget()
-                        if killer and killerHRP then
-                            print("[HDT] 🛡️ Block animation detected!")
-                            task.wait(guestCfg.hdtDelay)
-                            task.spawn(hdt_execute, killer, killerHRP)
-                        end
-                    end
-                end
-            end
+        -- Check if it's a block ability
+        local name = ""
+        pcall(function() name = buffer.tostring(data[1]) end)
+        if not name or not name:find("Block") then return end
+        
+        -- Block was fired! Now check cooldown
+        if guestCfg.hdtRespectCooldown and not hdt_isBlockReady() then
+            print("[HDT] ⏳ Block on cooldown (27s), HDT skipped")
+            return
         end
         
-        svc.Run.RenderStepped:Connect(function()
-            pcall(checkBlockAnimation)
-        end)
+        -- Block is ready, find target and execute HDT
+        local killer, killerHRP = hdt_findTarget()
+        if killer and killerHRP then
+            print("[HDT] 🛡️ Block detected! Executing HDT")
+            task.wait(guestCfg.hdtDelay)
+            task.spawn(hdt_execute, killer, killerHRP)
+        end
     end)
 end
 
+-- Also detect from AntiFlickZone (legacy support)
 local function hdt_setupAntiFlickDetection()
     task.spawn(function()
         while true do
@@ -5376,6 +5461,11 @@ local function hdt_setupAntiFlickDetection()
                 if part:IsA("BasePart") and part.Name == "AntiFlickZone" then
                     if (part.Position - myRoot.Position).Magnitude <= guestCfg.hdtRange then
                         if not hdt.debounce then
+                            -- Check cooldown
+                            if guestCfg.hdtRespectCooldown and not hdt_isBlockReady() then
+                                print("[HDT] ⏳ Block on cooldown (27s), HDT skipped")
+                                break
+                            end
                             local nearest = hdt_findTarget()
                             if nearest then
                                 print("[HDT] 🎯 AntiFlickZone detected!")
@@ -5391,10 +5481,6 @@ local function hdt_setupAntiFlickDetection()
         end
     end)
 end
-
--- Initialize
-task.spawn(hdt_setupBlockDetection)
-task.spawn(hdt_setupAntiFlickDetection)
 
 -- Range visualization
 local function hdt_updateRange()
@@ -5428,6 +5514,10 @@ end
 
 svc.Run.RenderStepped:Connect(hdt_updateRange)
 
+-- Initialize
+task.spawn(hdt_setupRemoteDetection)
+task.spawn(hdt_setupAntiFlickDetection)
+
 -- Handle character respawn
 lp.CharacterAdded:Connect(function()
     task.wait(0.5)
@@ -5442,13 +5532,24 @@ local secHDT = tabGuestHDT:Section({ Title = "Hitbox Dragging (HDT)", Opened = t
 
 secHDT:Toggle({
     Title = "Enable HDT",
-    Description = "Pulls you into the killer when you block",
+    Description = "Activates when you use block (respects 27s cooldown)",
     Type = "Checkbox",
     Flag = "hdtEnabled",
     Default = guestCfg.hdtEnabled,
     Callback = function(v)
         guestCfg.hdtEnabled = v
         if not v and hdt.debounce then hdt.cleanup() end
+    end
+})
+
+secHDT:Toggle({
+    Title = "Respect 27s Cooldown",
+    Description = "Only activate HDT when block is off cooldown",
+    Type = "Checkbox",
+    Flag = "hdtRespectCooldown",
+    Default = guestCfg.hdtRespectCooldown,
+    Callback = function(v)
+        guestCfg.hdtRespectCooldown = v
     end
 })
 
@@ -5535,6 +5636,16 @@ secHDT:Button({
             return
         end
         
+        -- Check cooldown
+        if guestCfg.hdtRespectCooldown and not hdt_isBlockReady() then
+            ui:Notify({
+                Title = "Block on Cooldown",
+                Content = "Wait " .. math.ceil(hdt.blockCooldownDuration - (tick() - hdt.lastBlockTime)) .. "s",
+                Duration = 2
+            })
+            return
+        end
+        
         local killer, killerHRP = hdt_findTarget()
         if killer and killerHRP then
             print("[HDT] 🧪 Force pulling to:", killer.Name)
@@ -5589,7 +5700,7 @@ secHDT:Button({
     end
 })
 
-print("[Guest HDT] ✅ Loaded successfully")
+print("[Guest HDT] ✅ Loaded - Activates on block remote with 27s cooldown")
 
 end -- tabGuestHDT
 
@@ -6427,6 +6538,92 @@ secUIFunctions:Button({ Title = "Close UI", Callback = function()
         if not ok then pcall(function() win:Close() end) end
     end)
 end })
+
+-- CONFIG SHARE
+local secConfigShare = tabInterface:Section({ Title = "Config Share", Opened = true })
+
+local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+local function b64Encode(str)
+    local result = {}
+    local bytes = {string.byte(str, 1, #str)}
+    for i = 1, #bytes, 3 do
+        local b1,b2,b3 = bytes[i] or 0, bytes[i+1] or 0, bytes[i+2] or 0
+        local n = b1*65536 + b2*256 + b3
+        result[#result+1] = B64CHARS:sub(math.floor(n/262144)%64+1, math.floor(n/262144)%64+1)
+        result[#result+1] = B64CHARS:sub(math.floor(n/4096)%64+1, math.floor(n/4096)%64+1)
+        result[#result+1] = bytes[i+1] and B64CHARS:sub(math.floor(n/64)%64+1, math.floor(n/64)%64+1) or "="
+        result[#result+1] = bytes[i+2] and B64CHARS:sub(n%64+1, n%64+1) or "="
+    end
+    return table.concat(result)
+end
+
+local function b64Decode(str)
+    local lookup = {}; for i=1,#B64CHARS do lookup[B64CHARS:sub(i,i)] = i-1 end
+    local bytes = {}
+    for i = 1, #str, 4 do
+        local c1 = lookup[str:sub(i,i)] or 0; local c2 = lookup[str:sub(i+1,i+1)] or 0
+        local c3 = lookup[str:sub(i+2,i+2)]; local c4 = lookup[str:sub(i+3,i+3)]
+        local n = c1*262144 + c2*4096 + (c3 or 0)*64 + (c4 or 0)
+        bytes[#bytes+1] = string.char(math.floor(n/65536)%256)
+        if c3 then bytes[#bytes+1] = string.char(math.floor(n/256)%256) end
+        if c4 then bytes[#bytes+1] = string.char(n%256) end
+    end
+    return table.concat(bytes)
+end
+
+local CONFIG_PATH = "WindUI/betrayalhub/config/betrayalhub.json"
+
+secConfigShare:Button({
+    Title = "📋 Copy Config",
+    Icon = "copy",
+    Callback = function()
+        pcall(function()
+            local ok,e = pcall(function()
+                local raw = readfile(CONFIG_PATH)
+                setclipboard("v1prw_full:"..b64Encode(raw))
+                print("[betrayalhub] Config copied!")
+            end)
+            if not ok then print("[betrayalhub] Copy failed: "..tostring(e)) end
+        end)
+    end
+})
+
+local importStr = ""
+
+secConfigShare:Input({
+    Title = "Paste Config String",
+    Icon = "clipboard",
+    Placeholder = "v1prw_full:...",
+    Callback = function(v) pcall(function() importStr = v end) end
+})
+
+secConfigShare:Button({
+    Title = "🔄 Load Config",
+    Icon = "download",
+    Callback = function()
+        pcall(function()
+            if importStr == "" then print("[betrayalhub] Paste a config string first"); return end
+            if importStr:match("^v1prw_full:") then
+                local ok,e = pcall(function()
+                    local d = b64Decode(importStr:sub(12))
+                    writefile(CONFIG_PATH, d)
+                    v1prConfig:Load()
+                    applyConfigFromFlags()
+                end)
+                if ok then print("[betrayalhub] Config loaded!") else print("[betrayalhub] Load failed: "..tostring(e)) end
+            else
+                print("[betrayalhub] Must start with v1prw_full:")
+            end
+        end)
+    end
+})
+
+secConfigShare:Button({
+    Title = "💾 Save Config",
+    Icon = "save",
+    Callback = function() pcall(function() v1prConfig:Save(); print("[betrayalhub] Config saved") end) end
+})
 
 end -- interface tab
 
