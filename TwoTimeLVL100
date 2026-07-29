@@ -3,22 +3,47 @@ local replicatedStorage = game:GetService("ReplicatedStorage")
 local player = players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-print("=== SCRIPT STARTED ===")
-
--- === BUTTON POSITION DATA ===
 local buttonPath = "MainUI.ShiftLockButton"
 local buttonName = "ShiftLockButton"
 local newPosition = UDim2.new(1.0, -148.0, 1.0, -4.0)
 local newSize = UDim2.new(0.0, 60.0, 0.0, 60.0)
 
--- === SKIN TRACKING ===
-local hasUsedLife1 = false
-local skinApplied = false
-local skinPurchased = false
+local hasUsedLife2 = false
+local isProcessing = false
 
--- ============================================
--- SHIFTLOCK BUTTON POSITIONING
--- ============================================
+local localPlayerName = player.Name
+
+local function changeTwoTimeIcon()
+    local success = false
+    local attempts = 0
+    
+    while not success and attempts < 20 do
+        attempts = attempts + 1
+        local tempUI = playerGui:FindFirstChild("TemporaryUI")
+        if tempUI then
+            local playerInfo = tempUI:FindFirstChild("PlayerInfo")
+            if playerInfo then
+                local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
+                if currentSurvivors then
+                    local twoTime = currentSurvivors:FindFirstChild("TwoTime")
+                    if twoTime then
+                        local icon = twoTime:FindFirstChild("Icon")
+                        if icon and icon:IsA("ImageLabel") then
+                            icon.Image = "rbxassetid://85628434666828"
+                            success = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        if not success then
+            task.wait(0.5)
+        end
+    end
+    
+    return success
+end
 
 local function findButton()
     local function findGuiByPath(path)
@@ -63,7 +88,6 @@ local function positionButton(button)
     if button then
         button.Position = newPosition
         button.Size = newSize
-        print("✅ ShiftLock button positioned!")
         return true
     end
     return false
@@ -79,7 +103,6 @@ local function setupButtonTracker(button)
            math.abs(currentPos.X.Scale - newPosition.X.Scale) > 0.001 or
            math.abs(currentPos.Y.Scale - newPosition.Y.Scale) > 0.001 then
             button.Position = newPosition
-            print("🔄 ShiftLock repositioned (game tried to move it)")
         end
     end)
     
@@ -90,36 +113,28 @@ local function setupButtonTracker(button)
            math.abs(currentSize.X.Scale - newSize.X.Scale) > 0.001 or
            math.abs(currentSize.Y.Scale - newSize.Y.Scale) > 0.001 then
             button.Size = newSize
-            print("🔄 ShiftLock resized (game tried to resize it)")
         end
     end)
 end
 
--- Initial button positioning
 task.spawn(function()
     task.wait(1)
     local button = findButton()
     if button then
         positionButton(button)
         setupButtonTracker(button)
-        print("🔒 ShiftLock tracking active")
-    else
-        print("⚠️ ShiftLock button not found yet, waiting...")
     end
 end)
 
--- Watch for button being added later
 playerGui.DescendantAdded:Connect(function(descendant)
     if descendant.Name == buttonName and 
        (descendant:IsA("GuiButton") or descendant:IsA("TextButton") or descendant:IsA("ImageButton")) then
         task.wait(0.1)
         positionButton(descendant)
         setupButtonTracker(descendant)
-        print("🔒 ShiftLock tracking active (newly added)")
     end
 end)
 
--- Keep repositioning every few seconds just in case
 task.spawn(function()
     while true do
         task.wait(3)
@@ -130,158 +145,114 @@ task.spawn(function()
     end
 end)
 
--- ============================================
--- BUY & EQUIP SKIN SYSTEM
--- ============================================
+playerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == "TemporaryUI" and descendant:IsA("ScreenGui") then
+        task.wait(0.5)
+        changeTwoTimeIcon()
+    end
+end)
 
--- Load required modules
-local dataHandler = replicatedStorage:FindFirstChild("Modules")
-if dataHandler then
-    dataHandler = dataHandler:FindFirstChild("Data")
-    if dataHandler then
-        dataHandler = dataHandler:FindFirstChild("DataHandler")
+playerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == "TwoTime" and descendant:IsA("Folder") then
+        task.wait(0.2)
+        changeTwoTimeIcon()
+    elseif descendant.Name == "Icon" and descendant:IsA("ImageLabel") then
+        local parent = descendant.Parent
+        if parent and parent.Name == "TwoTime" then
+            descendant.Image = "rbxassetid://85628434666828"
+        end
     end
-end
+end)
 
-local network = replicatedStorage:FindFirstChild("Modules")
-if network then
-    network = network:FindFirstChild("Network")
-    if network then
-        network = network:FindFirstChild("Network")
+task.spawn(function()
+    while true do
+        task.wait(5)
+        local tempUI = playerGui:FindFirstChild("TemporaryUI")
+        if tempUI then
+            local playerInfo = tempUI:FindFirstChild("PlayerInfo")
+            if playerInfo then
+                local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
+                if currentSurvivors then
+                    local twoTime = currentSurvivors:FindFirstChild("TwoTime")
+                    if twoTime then
+                        local icon = twoTime:FindFirstChild("Icon")
+                        if icon and icon:IsA("ImageLabel") and icon.Image ~= "rbxassetid://85628434666828" then
+                            icon.Image = "rbxassetid://85628434666828"
+                        end
+                    end
+                end
+            end
+        end
     end
-end
+end)
 
-local dataHandlerModule = dataHandler and require(dataHandler)
-local networkModule = network and require(network)
-
-if not dataHandlerModule then
-    warn("❌ DataHandler not found - equip system disabled")
-end
-if not networkModule then
-    warn("❌ Network module not found - equip system disabled")
-end
-
--- Function to BUY the LegacyMS100TwoTime skin
-local function buyLegacyMS100Skin()
-    if not dataHandlerModule or not networkModule then
-        print("❌ Required modules not loaded")
-        return false
-    end
+local function isDaggerOrWeapon(child)
+    if not child then return false end
     
-    print("🔍 Checking if LegacyMS100TwoTime is already owned...")
+    local name = child.Name
     
-    -- Check if we already own it
-    local purchased = dataHandlerModule:ReadPath("Purchased")
-    if not purchased then
-        print("❌ Purchased data not found")
-        return false
-    end
-    
-    local skinsFolder = purchased:FindFirstChild("Skins")
-    if not skinsFolder then
-        print("❌ Skins folder not found")
-        return false
-    end
-    
-    local survivorsFolder = skinsFolder:FindFirstChild("Survivors")
-    if not survivorsFolder then
-        print("❌ Survivors folder not found in Skins")
-        return false
-    end
-    
-    -- Check if TwoTime skin folder exists in purchased
-    local twoTimeSkin = survivorsFolder:FindFirstChild("LegacyMS100TwoTime")
-    
-    if twoTimeSkin then
-        print("✅ LegacyMS100TwoTime is already owned!")
+    if name == "GhostFire" or name == "Dagger" or name == "DaggerTemplate" then
         return true
     end
     
-    print("🛒 LegacyMS100TwoTime not owned. Attempting to purchase...")
+    if name == "Crouch" or name == "CrouchStart" or name == "CrouchIdle" or 
+       name == "CrouchWalk" or name == "CrouchRun" or name == "CrouchStab" then
+        return true
+    end
     
-    -- Find the skin in Assets to purchase
-    local assets = replicatedStorage:FindFirstChild("Assets")
-    if assets then
-        assets = assets:FindFirstChild("Skins")
-        if assets then
-            assets = assets:FindFirstChild("Survivors")
-            if assets then
-                assets = assets:FindFirstChild("TwoTime")
-                if assets then
-                    assets = assets:FindFirstChild("LegacyMS100TwoTime")
+    local weaponKeywords = {
+        "Dagger", "Weapon", "Sword", "Blade", "Knife", "Tool", "HopperBin",
+        "Handle", "Grip", "Guard", "Pommel", "Tip", "Edge", "Point",
+        "Hitbox", "Collision", "Detector", "Query", "Damage", "Attack",
+        "Slash", "Stab", "Lunge", "Fire", "GhostFire"
+    }
+    
+    for _, keyword in ipairs(weaponKeywords) do
+        if string.find(name, keyword) then
+            return true
+        end
+    end
+    
+    if child:IsA("Tool") or child:IsA("HopperBin") then
+        return true
+    end
+    
+    if child:IsA("Model") then
+        for _, descendant in ipairs(child:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                local partName = descendant.Name
+                if string.find(partName, "Blade") or string.find(partName, "Handle") or 
+                   string.find(partName, "Guard") or string.find(partName, "Dagger") or
+                   string.find(partName, "Crouch") then
+                    return true
                 end
             end
         end
     end
     
-    if not assets then
-        print("❌ Could not find LegacyMS100TwoTime in Assets")
-        return false
-    end
-    
-    -- Send purchase request to server
-    local purchaseResult = networkModule:FireServerConnection("PurchaseContent", "REMOTE_FUNCTION", assets)
-    
-    if purchaseResult and purchaseResult.Status == "success" then
-        print("✅ Successfully purchased LegacyMS100TwoTime skin!")
-        skinPurchased = true
-        return true
-    else
-        local errorMsg = purchaseResult and purchaseResult.Status or "unknown"
-        print("❌ Purchase failed: " .. errorMsg)
-        return false
-    end
+    return false
 end
 
--- Function to EQUIP the LegacyMS100TwoTime skin (the whole folder)
-local function equipLegacyMS100Skin()
-    if not dataHandlerModule or not networkModule then
-        print("❌ Required modules not loaded")
-        return false
+local function shouldIgnorePart(partName)
+    if not partName then return true end
+    
+    local ignoreKeywords = {
+        "Hitbox", "Collision", "Detector", "Query", "Holder", 
+        "HumanoidRootPart", "Root", "Weapon", "Blade", "Handle",
+        "Guard", "Pommel", "Grip", "Dagger", "GhostFire",
+        "Lunge", "Stab", "Damage", "Attack",
+        "Crouch", "CrouchStart", "CrouchIdle", "CrouchWalk", 
+        "CrouchRun", "CrouchStab", "Ritual", "Respawn"
+    }
+    
+    for _, keyword in ipairs(ignoreKeywords) do
+        if string.find(partName, keyword) then
+            return true
+        end
     end
     
-    print("🔧 Equipping LegacyMS100TwoTime skin...")
-    
-    -- Find the skin in purchased data
-    local purchased = dataHandlerModule:ReadPath("Purchased")
-    if not purchased then
-        print("❌ Purchased data not found")
-        return false
-    end
-    
-    local skinsFolder = purchased:FindFirstChild("Skins")
-    if not skinsFolder then
-        print("❌ Skins folder not found")
-        return false
-    end
-    
-    local survivorsFolder = skinsFolder:FindFirstChild("Survivors")
-    if not survivorsFolder then
-        print("❌ Survivors folder not found")
-        return false
-    end
-    
-    local twoTimeSkin = survivorsFolder:FindFirstChild("LegacyMS100TwoTime")
-    if not twoTimeSkin then
-        print("❌ LegacyMS100TwoTime not found in purchased data!")
-        return false
-    end
-    
-    -- Send equip request to server for the WHOLE skin folder
-    local equipResult = networkModule:FireServerConnection("EquipState", "REMOTE_EVENT", twoTimeSkin, true)
-    
-    if equipResult then
-        print("✅ LegacyMS100TwoTime equipped successfully!")
-        return true
-    else
-        print("❌ Equip request failed")
-        return false
-    end
+    return false
 end
-
--- ============================================
--- VISUAL SKIN SYSTEM (Life1 / Life2)
--- ============================================
 
 local function runSkinScript(forcedModelName)
     local character = player.Character
@@ -294,7 +265,6 @@ local function runSkinScript(forcedModelName)
         return false 
     end
 
-    -- Check game state
     local map = workspace:FindFirstChild("Map")
     if not map then return false end
 
@@ -311,9 +281,6 @@ local function runSkinScript(forcedModelName)
         return false 
     end
 
-    print("✅ Game checks passed! Applying visual skin...")
-
-    -- Asset path for the skin model
     local legacyMS4 = replicatedStorage:FindFirstChild("Assets")
     if legacyMS4 then
         legacyMS4 = legacyMS4:FindFirstChild("Skins")
@@ -329,36 +296,64 @@ local function runSkinScript(forcedModelName)
     end
     
     if not legacyMS4 then
-        print("❌ Could not find LegacyMS100TwoTime skin model")
         return true 
     end
 
     local config = legacyMS4:FindFirstChild("Config")
     if not config then
-        print("❌ Config folder missing")
         return true
     end
 
-    -- The model name inside Config (Life1 or Life2)
     local targetModel = config:FindFirstChild(forcedModelName)
     if not targetModel then
-        print("❌ Model " .. forcedModelName .. " missing in Config")
         return true
     end
 
-    print("🎯 Applying visual model: " .. targetModel.Name)
-
-    -- Clear old stuff
+    local attachmentsToRemove = {}
     for _, child in ipairs(character:GetChildren()) do
-        if child:IsA("Clothing") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("Accessory") or child:IsA("Hat") or child:IsA("ShirtGraphic") then
-            child:Destroy()
-        elseif child:IsA("Model") and child.Name ~= "LegacyMS4_Attached" and child.Name ~= "Head" then
-            child:Destroy()
+        if isDaggerOrWeapon(child) then
+            continue
         end
+        
+        if child.Name == "Head" then
+            continue
+        end
+        
+        if child.Name == "LegacyMS4_Attached" then
+            continue
+        end
+        
+        if child:IsA("Clothing") or child:IsA("Shirt") or child:IsA("Pants") or 
+           child:IsA("Accessory") or child:IsA("Hat") or child:IsA("ShirtGraphic") then
+            table.insert(attachmentsToRemove, child)
+        elseif child:IsA("Model") then
+            local isWeapon = false
+            for _, part in ipairs(child:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    local partName = part.Name
+                    if string.find(partName, "Blade") or string.find(partName, "Handle") or 
+                       string.find(partName, "Dagger") or string.find(partName, "GhostFire") or
+                       string.find(partName, "Hitbox") or string.find(partName, "Collision") or
+                       string.find(partName, "Crouch") then
+                        isWeapon = true
+                        break
+                    end
+                end
+            end
+            if not isWeapon then
+                table.insert(attachmentsToRemove, child)
+            end
+        end
+    end
+    
+    for _, item in ipairs(attachmentsToRemove) do
+        item:Destroy()
     end
 
     local old = character:FindFirstChild("LegacyMS4_Attached")
-    if old then old:Destroy() end
+    if old then 
+        old:Destroy() 
+    end
 
     local folder = Instance.new("Folder")
     folder.Name = "LegacyMS4_Attached"
@@ -379,27 +374,33 @@ local function runSkinScript(forcedModelName)
     end
 
     local modelPivot = targetModel:GetPivot()
-    local attachedCount = 0
 
     for _, part in ipairs(targetModel:GetDescendants()) do
         if part:IsA("BasePart") then
             local partName = part.Name
-            if string.find(partName, "Hitbox") or string.find(partName, "Collision") or string.find(partName, "Detector") or string.find(partName, "Query") or string.find(partName, "Holder") or string.find(partName, "HumanoidRootPart") or string.find(partName, "Root") or string.find(partName, "Weapon") or string.find(partName, "Blade") or string.find(partName, "Handle") then
+            
+            if shouldIgnorePart(partName) then
                 continue
             end
 
             local target = nil
             if partName == "hair" or partName == "halo" or partName == "hat" then
                 target = head
-            elseif partName == "Torso" or partName == "graphic" or partName == "belt" or partName == "scarf" or partName == "chest" or partName == "tail" or partName == "wings" or partName == "wing1" or partName == "wing2" then
+            elseif partName == "Torso" or partName == "graphic" or partName == "belt" or 
+                   partName == "scarf" or partName == "chest" or partName == "tail" or 
+                   partName == "wings" or partName == "wing1" or partName == "wing2" then
                 target = torso
             elseif string.find(partName, "Left") or string.find(partName, "left") then
                 if string.find(partName, "Leg") then target = leftLeg
-                elseif string.find(partName, "Arm") or string.find(partName, "Hand") or string.find(partName, "Glove") or string.find(partName, "Bandage") then target = leftArm
+                elseif string.find(partName, "Arm") or string.find(partName, "Hand") or 
+                       string.find(partName, "Glove") or string.find(partName, "Bandage") then 
+                    target = leftArm
                 else target = torso end
             elseif string.find(partName, "Right") or string.find(partName, "right") then
                 if string.find(partName, "Leg") then target = rightLeg
-                elseif string.find(partName, "Arm") or string.find(partName, "Hand") or string.find(partName, "Glove") or string.find(partName, "Bandage") then target = rightArm
+                elseif string.find(partName, "Arm") or string.find(partName, "Hand") or 
+                       string.find(partName, "Glove") or string.find(partName, "Bandage") then 
+                    target = rightArm
                 else target = torso end
             else
                 target = torso
@@ -433,128 +434,102 @@ local function runSkinScript(forcedModelName)
                 weld.Part1 = newPart
                 weld.C0 = target.CFrame:ToObjectSpace(newPart.CFrame)
                 weld.Parent = newPart
-
-                attachedCount = attachedCount + 1
             end
         end
     end
 
-    print("✅ Attached " .. attachedCount .. " visual parts from " .. targetModel.Name)
-    skinApplied = true
     return true
 end
 
--- ============================================
--- MAIN LOGIC: BUY + EQUIP (LegacyMS100TwoTime) + VISUAL (Life1/Life2)
--- ============================================
-
--- Function to handle buying, equipping, and visual skin
-local function applySkin(modelName)
-    -- modelName = "Life1" or "Life2" (for visual only)
+local function applySkin()
+    if isProcessing then return end
+    isProcessing = true
     
-    -- Step 1: Buy the LegacyMS100TwoTime skin if not owned
-    if not skinPurchased then
-        local buySuccess = buyLegacyMS100Skin()
-        if buySuccess then
-            skinPurchased = true
-            print("✅ LegacyMS100TwoTime purchased!")
-        else
-            print("⚠️ Failed to purchase skin, but continuing...")
+    local chosenModel
+    if not hasUsedLife2 then
+        chosenModel = "Life1"
+    else
+        chosenModel = "Life2"
+    end
+    
+    local success = false
+    local attempts = 0
+    while not success and attempts < 10 do
+        success = runSkinScript(chosenModel)
+        attempts = attempts + 1
+        if not success then
+            task.wait(0.5)
         end
     end
     
-    -- Step 2: Equip the LegacyMS100TwoTime skin (the whole thing)
-    local equipSuccess = equipLegacyMS100Skin()
-    
-    if equipSuccess then
-        print("✅ LegacyMS100TwoTime equipped in inventory!")
-    else
-        print("⚠️ Failed to equip LegacyMS100TwoTime, but continuing with visual...")
-    end
-    
-    -- Step 3: Apply visual skin (Life1 or Life2)
-    return runSkinScript(modelName)
+    isProcessing = false
+    return success
 end
 
 player.CharacterAdded:Connect(function(char)
-    local humanoid = char:WaitForChild("Humanoid")
     task.wait(0.5)
     
-    local spawnHealth = humanoid.Health
-    local chosenModel
-    
-    if not hasUsedLife1 then
-        chosenModel = "Life1"
-        hasUsedLife1 = true
-        print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Visual: Life1")
-    else
-        chosenModel = "Life2"
-        print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Visual: Life2")
+    if hasUsedLife2 then
+        hasUsedLife2 = false
     end
     
-    -- Apply skin with buy + equip (LegacyMS100TwoTime) + visual (Life1/Life2)
-    skinApplied = false
-    local spawned = false
-    while not spawned do
-        spawned = applySkin(chosenModel)
-        task.wait(1)
-    end
+    applySkin()
 end)
 
--- Initial execution if already spawned
-task.spawn(function()
-    local initialLoaded = false
-    while not initialLoaded do
-        local char = player.Character
-        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-        
-        if humanoid and humanoid.Health > 0 then
-            local spawnHealth = humanoid.Health
-            local chosenModel
-            
-            if not hasUsedLife1 then
-                chosenModel = "Life1"
-                hasUsedLife1 = true
-                print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Visual: Life1")
-            else
-                chosenModel = "Life2"
-                print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Visual: Life2")
-            end
-            
-            initialLoaded = applySkin(chosenModel)
+local hasBeenAlive = false
+
+player.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    
+    local character = player.Character
+    if not character then return end
+    
+    local playersFolder = workspace:FindFirstChild("Players")
+    if not playersFolder then return end
+    
+    local survivors = playersFolder:FindFirstChild("Survivors")
+    if not survivors then return end
+    
+    if character:IsDescendantOf(survivors) then
+        if hasBeenAlive and not hasUsedLife2 then
+            hasUsedLife2 = true
         end
-        task.wait(1)
+        
+        applySkin()
+        hasBeenAlive = true
+    else
+        hasBeenAlive = false
+        hasUsedLife2 = false
     end
 end)
-
--- ============================================
--- ROUND END DETECTION: Reset when removed from Survivors
--- ============================================
 
 task.spawn(function()
     while true do
         task.wait(2)
-        
         local character = player.Character
         local playersFolder = workspace:FindFirstChild("Players")
-        
         if playersFolder then
             local survivors = playersFolder:FindFirstChild("Survivors")
             if survivors and character then
-                if not character:IsDescendantOf(survivors) and hasUsedLife1 then
-                    print("🔄 REMOVED FROM SURVIVORS! Cycle reset.")
-                    hasUsedLife1 = false
-                    skinApplied = false
+                if not character:IsDescendantOf(survivors) then
+                    hasBeenAlive = false
+                    hasUsedLife2 = false
                 end
             end
         end
     end
 end)
 
-print("=== SCRIPT FULLY LOADED ===")
-print("✅ ShiftLock Button: Positioned & Locked")
-print("✅ Buy System: Will purchase LegacyMS100TwoTime skin")
-print("✅ Equip System: Will equip LegacyMS100TwoTime in inventory (shows 'Equipped' badge)")
-print("✅ Visual System: Life1 (first spawn) / Life2 (respawns) on character")
-print("✅ Cycle Reset: When removed from Survivors")
-print("=== READY ===")
+task.spawn(function()
+    task.wait(1)
+    if player.Character then
+        hasBeenAlive = false
+        hasUsedLife2 = false
+        applySkin()
+    end
+end)
+
+task.spawn(function()
+    task.wait(2)
+    changeTwoTimeIcon()
+end)
