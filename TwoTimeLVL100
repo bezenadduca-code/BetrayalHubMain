@@ -14,6 +14,7 @@ local newSize = UDim2.new(0.0, 60.0, 0.0, 60.0)
 -- === SKIN TRACKING ===
 local hasUsedLife1 = false
 local skinApplied = false
+local skinPurchased = false
 
 -- ============================================
 -- SHIFTLOCK BUTTON POSITIONING
@@ -27,7 +28,7 @@ local function findButton()
         end
         
         local current = playerGui
-        for _, partName in iparts(parts) do
+        for _, partName in ipairs(parts) do
             current = current and current:FindFirstChild(partName)
             if not current then
                 return nil
@@ -130,7 +131,156 @@ task.spawn(function()
 end)
 
 -- ============================================
--- SKIN SYSTEM (Life1 / Life2)
+-- BUY & EQUIP SKIN SYSTEM
+-- ============================================
+
+-- Load required modules
+local dataHandler = replicatedStorage:FindFirstChild("Modules")
+if dataHandler then
+    dataHandler = dataHandler:FindFirstChild("Data")
+    if dataHandler then
+        dataHandler = dataHandler:FindFirstChild("DataHandler")
+    end
+end
+
+local network = replicatedStorage:FindFirstChild("Modules")
+if network then
+    network = network:FindFirstChild("Network")
+    if network then
+        network = network:FindFirstChild("Network")
+    end
+end
+
+local dataHandlerModule = dataHandler and require(dataHandler)
+local networkModule = network and require(network)
+
+if not dataHandlerModule then
+    warn("❌ DataHandler not found - equip system disabled")
+end
+if not networkModule then
+    warn("❌ Network module not found - equip system disabled")
+end
+
+-- Function to BUY the LegacyMS100TwoTime skin
+local function buyLegacyMS100Skin()
+    if not dataHandlerModule or not networkModule then
+        print("❌ Required modules not loaded")
+        return false
+    end
+    
+    print("🔍 Checking if LegacyMS100TwoTime is already owned...")
+    
+    -- Check if we already own it
+    local purchased = dataHandlerModule:ReadPath("Purchased")
+    if not purchased then
+        print("❌ Purchased data not found")
+        return false
+    end
+    
+    local skinsFolder = purchased:FindFirstChild("Skins")
+    if not skinsFolder then
+        print("❌ Skins folder not found")
+        return false
+    end
+    
+    local survivorsFolder = skinsFolder:FindFirstChild("Survivors")
+    if not survivorsFolder then
+        print("❌ Survivors folder not found in Skins")
+        return false
+    end
+    
+    -- Check if TwoTime skin folder exists in purchased
+    local twoTimeSkin = survivorsFolder:FindFirstChild("LegacyMS100TwoTime")
+    
+    if twoTimeSkin then
+        print("✅ LegacyMS100TwoTime is already owned!")
+        return true
+    end
+    
+    print("🛒 LegacyMS100TwoTime not owned. Attempting to purchase...")
+    
+    -- Find the skin in Assets to purchase
+    local assets = replicatedStorage:FindFirstChild("Assets")
+    if assets then
+        assets = assets:FindFirstChild("Skins")
+        if assets then
+            assets = assets:FindFirstChild("Survivors")
+            if assets then
+                assets = assets:FindFirstChild("TwoTime")
+                if assets then
+                    assets = assets:FindFirstChild("LegacyMS100TwoTime")
+                end
+            end
+        end
+    end
+    
+    if not assets then
+        print("❌ Could not find LegacyMS100TwoTime in Assets")
+        return false
+    end
+    
+    -- Send purchase request to server
+    local purchaseResult = networkModule:FireServerConnection("PurchaseContent", "REMOTE_FUNCTION", assets)
+    
+    if purchaseResult and purchaseResult.Status == "success" then
+        print("✅ Successfully purchased LegacyMS100TwoTime skin!")
+        skinPurchased = true
+        return true
+    else
+        local errorMsg = purchaseResult and purchaseResult.Status or "unknown"
+        print("❌ Purchase failed: " .. errorMsg)
+        return false
+    end
+end
+
+-- Function to EQUIP the LegacyMS100TwoTime skin (the whole folder)
+local function equipLegacyMS100Skin()
+    if not dataHandlerModule or not networkModule then
+        print("❌ Required modules not loaded")
+        return false
+    end
+    
+    print("🔧 Equipping LegacyMS100TwoTime skin...")
+    
+    -- Find the skin in purchased data
+    local purchased = dataHandlerModule:ReadPath("Purchased")
+    if not purchased then
+        print("❌ Purchased data not found")
+        return false
+    end
+    
+    local skinsFolder = purchased:FindFirstChild("Skins")
+    if not skinsFolder then
+        print("❌ Skins folder not found")
+        return false
+    end
+    
+    local survivorsFolder = skinsFolder:FindFirstChild("Survivors")
+    if not survivorsFolder then
+        print("❌ Survivors folder not found")
+        return false
+    end
+    
+    local twoTimeSkin = survivorsFolder:FindFirstChild("LegacyMS100TwoTime")
+    if not twoTimeSkin then
+        print("❌ LegacyMS100TwoTime not found in purchased data!")
+        return false
+    end
+    
+    -- Send equip request to server for the WHOLE skin folder
+    local equipResult = networkModule:FireServerConnection("EquipState", "REMOTE_EVENT", twoTimeSkin, true)
+    
+    if equipResult then
+        print("✅ LegacyMS100TwoTime equipped successfully!")
+        return true
+    else
+        print("❌ Equip request failed")
+        return false
+    end
+end
+
+-- ============================================
+-- VISUAL SKIN SYSTEM (Life1 / Life2)
 -- ============================================
 
 local function runSkinScript(forcedModelName)
@@ -161,9 +311,9 @@ local function runSkinScript(forcedModelName)
         return false 
     end
 
-    print("✅ Game checks passed! Applying skin...")
+    print("✅ Game checks passed! Applying visual skin...")
 
-    -- Asset path
+    -- Asset path for the skin model
     local legacyMS4 = replicatedStorage:FindFirstChild("Assets")
     if legacyMS4 then
         legacyMS4 = legacyMS4:FindFirstChild("Skins")
@@ -179,7 +329,7 @@ local function runSkinScript(forcedModelName)
     end
     
     if not legacyMS4 then
-        print("❌ Could not find LegacyMS100TwoTime")
+        print("❌ Could not find LegacyMS100TwoTime skin model")
         return true 
     end
 
@@ -189,13 +339,14 @@ local function runSkinScript(forcedModelName)
         return true
     end
 
+    -- The model name inside Config (Life1 or Life2)
     local targetModel = config:FindFirstChild(forcedModelName)
     if not targetModel then
-        print("❌ Model " .. forcedModelName .. " missing")
+        print("❌ Model " .. forcedModelName .. " missing in Config")
         return true
     end
 
-    print("🎯 Applying model: " .. targetModel.Name)
+    print("🎯 Applying visual model: " .. targetModel.Name)
 
     -- Clear old stuff
     for _, child in ipairs(character:GetChildren()) do
@@ -288,14 +439,42 @@ local function runSkinScript(forcedModelName)
         end
     end
 
-    print("✅ Attached " .. attachedCount .. " parts from " .. targetModel.Name)
+    print("✅ Attached " .. attachedCount .. " visual parts from " .. targetModel.Name)
     skinApplied = true
     return true
 end
 
 -- ============================================
--- SKIN LOGIC: Life1 first spawn, Life2 respawn
+-- MAIN LOGIC: BUY + EQUIP (LegacyMS100TwoTime) + VISUAL (Life1/Life2)
 -- ============================================
+
+-- Function to handle buying, equipping, and visual skin
+local function applySkin(modelName)
+    -- modelName = "Life1" or "Life2" (for visual only)
+    
+    -- Step 1: Buy the LegacyMS100TwoTime skin if not owned
+    if not skinPurchased then
+        local buySuccess = buyLegacyMS100Skin()
+        if buySuccess then
+            skinPurchased = true
+            print("✅ LegacyMS100TwoTime purchased!")
+        else
+            print("⚠️ Failed to purchase skin, but continuing...")
+        end
+    end
+    
+    -- Step 2: Equip the LegacyMS100TwoTime skin (the whole thing)
+    local equipSuccess = equipLegacyMS100Skin()
+    
+    if equipSuccess then
+        print("✅ LegacyMS100TwoTime equipped in inventory!")
+    else
+        print("⚠️ Failed to equip LegacyMS100TwoTime, but continuing with visual...")
+    end
+    
+    -- Step 3: Apply visual skin (Life1 or Life2)
+    return runSkinScript(modelName)
+end
 
 player.CharacterAdded:Connect(function(char)
     local humanoid = char:WaitForChild("Humanoid")
@@ -307,16 +486,17 @@ player.CharacterAdded:Connect(function(char)
     if not hasUsedLife1 then
         chosenModel = "Life1"
         hasUsedLife1 = true
-        print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Life1")
+        print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Visual: Life1")
     else
         chosenModel = "Life2"
-        print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Life2")
+        print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Visual: Life2")
     end
     
+    -- Apply skin with buy + equip (LegacyMS100TwoTime) + visual (Life1/Life2)
     skinApplied = false
     local spawned = false
     while not spawned do
-        spawned = runSkinScript(chosenModel)
+        spawned = applySkin(chosenModel)
         task.wait(1)
     end
 end)
@@ -335,13 +515,13 @@ task.spawn(function()
             if not hasUsedLife1 then
                 chosenModel = "Life1"
                 hasUsedLife1 = true
-                print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Life1")
+                print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Visual: Life1")
             else
                 chosenModel = "Life2"
-                print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Life2")
+                print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Visual: Life2")
             end
             
-            initialLoaded = runSkinScript(chosenModel)
+            initialLoaded = applySkin(chosenModel)
         end
         task.wait(1)
     end
@@ -373,6 +553,8 @@ end)
 
 print("=== SCRIPT FULLY LOADED ===")
 print("✅ ShiftLock Button: Positioned & Locked")
-print("✅ Skin System: Life1 (first spawn) / Life2 (respawns)")
+print("✅ Buy System: Will purchase LegacyMS100TwoTime skin")
+print("✅ Equip System: Will equip LegacyMS100TwoTime in inventory (shows 'Equipped' badge)")
+print("✅ Visual System: Life1 (first spawn) / Life2 (respawns) on character")
 print("✅ Cycle Reset: When removed from Survivors")
 print("=== READY ===")
