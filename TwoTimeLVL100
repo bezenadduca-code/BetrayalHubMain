@@ -1,35 +1,203 @@
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+local players = game:GetService("Players")
 local replicatedStorage = game:GetService("ReplicatedStorage")
+local player = players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
--- ============================================================
--- INGAME + SURVIVOR CHECK
--- ============================================================
-local function isIngameAsSurvivor()
-    -- Check if Map/Ingame exist (match active)
-    local map = workspace:FindFirstChild("Map")
-    if not map then return false end
-    local ingame = map:FindFirstChild("Ingame")
-    if not ingame then return false end
+print("=== SCRIPT STARTED ===")
 
-    -- Check if player is in Survivors team
-    local playersFolder = workspace:FindFirstChild("Players")
-    if not playersFolder then return false end
-    local survivors = playersFolder:FindFirstChild("Survivors")
-    if not survivors then return false end
+-- === BUTTON POSITION DATA ===
+local buttonPath = "MainUI.ShiftLockButton"
+local buttonName = "ShiftLockButton"
+local newPosition = UDim2.new(1.0, -148.0, 1.0, -4.0)
+local newSize = UDim2.new(0.0, 60.0, 0.0, 60.0)
 
-    -- Check if player's character is a descendant of Survivors
-    if character and character:IsDescendantOf(survivors) then
+-- === SKIN TRACKING ===
+local hasUsedLife1 = false
+local skinApplied = false
+
+-- ============================================
+-- SHIFTLOCK BUTTON POSITIONING
+-- ============================================
+
+local function findButton()
+    local function findGuiByPath(path)
+        local parts = {}
+        for part in string.gmatch(path, "[^%.]+") do
+            table.insert(parts, part)
+        end
+        
+        local current = playerGui
+        for _, partName in iparts(parts) do
+            current = current and current:FindFirstChild(partName)
+            if not current then
+                return nil
+            end
+        end
+        return current
+    end
+    
+    local function findButtonByName(name)
+        for _, descendant in ipairs(playerGui:GetDescendants()) do
+            if descendant.Name == name and 
+               (descendant:IsA("GuiButton") or descendant:IsA("TextButton") or descendant:IsA("ImageButton")) then
+                return descendant
+            end
+        end
+        return nil
+    end
+    
+    local button = findGuiByPath(buttonPath)
+    if not button then
+        button = findButtonByName(buttonName)
+    end
+    
+    return button
+end
+
+local function positionButton(button)
+    if not button then
+        button = findButton()
+    end
+    
+    if button then
+        button.Position = newPosition
+        button.Size = newSize
+        print("✅ ShiftLock button positioned!")
         return true
     end
     return false
 end
 
--- ============================================================
--- MAIN FUNCTION
--- ============================================================
-local function clearOldClothingAndAccessories()
+local function setupButtonTracker(button)
+    if not button then return end
+    
+    button:GetPropertyChangedSignal("Position"):Connect(function()
+        local currentPos = button.Position
+        if math.abs(currentPos.X.Offset - newPosition.X.Offset) > 0.1 or
+           math.abs(currentPos.Y.Offset - newPosition.Y.Offset) > 0.1 or
+           math.abs(currentPos.X.Scale - newPosition.X.Scale) > 0.001 or
+           math.abs(currentPos.Y.Scale - newPosition.Y.Scale) > 0.001 then
+            button.Position = newPosition
+            print("🔄 ShiftLock repositioned (game tried to move it)")
+        end
+    end)
+    
+    button:GetPropertyChangedSignal("Size"):Connect(function()
+        local currentSize = button.Size
+        if math.abs(currentSize.X.Offset - newSize.X.Offset) > 0.1 or
+           math.abs(currentSize.Y.Offset - newSize.Y.Offset) > 0.1 or
+           math.abs(currentSize.X.Scale - newSize.X.Scale) > 0.001 or
+           math.abs(currentSize.Y.Scale - newSize.Y.Scale) > 0.001 then
+            button.Size = newSize
+            print("🔄 ShiftLock resized (game tried to resize it)")
+        end
+    end)
+end
+
+-- Initial button positioning
+task.spawn(function()
+    task.wait(1)
+    local button = findButton()
+    if button then
+        positionButton(button)
+        setupButtonTracker(button)
+        print("🔒 ShiftLock tracking active")
+    else
+        print("⚠️ ShiftLock button not found yet, waiting...")
+    end
+end)
+
+-- Watch for button being added later
+playerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == buttonName and 
+       (descendant:IsA("GuiButton") or descendant:IsA("TextButton") or descendant:IsA("ImageButton")) then
+        task.wait(0.1)
+        positionButton(descendant)
+        setupButtonTracker(descendant)
+        print("🔒 ShiftLock tracking active (newly added)")
+    end
+end)
+
+-- Keep repositioning every few seconds just in case
+task.spawn(function()
+    while true do
+        task.wait(3)
+        local button = findButton()
+        if button then
+            positionButton(button)
+        end
+    end
+end)
+
+-- ============================================
+-- SKIN SYSTEM (Life1 / Life2)
+-- ============================================
+
+local function runSkinScript(forcedModelName)
+    local character = player.Character
+    if not character then 
+        return false 
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then 
+        return false 
+    end
+
+    -- Check game state
+    local map = workspace:FindFirstChild("Map")
+    if not map then return false end
+
+    local ingame = map:FindFirstChild("Ingame")
+    if not ingame then return false end
+
+    local playersFolder = workspace:FindFirstChild("Players")
+    if not playersFolder then return false end
+
+    local survivors = playersFolder:FindFirstChild("Survivors")
+    if not survivors then return false end
+
+    if not character:IsDescendantOf(survivors) then 
+        return false 
+    end
+
+    print("✅ Game checks passed! Applying skin...")
+
+    -- Asset path
+    local legacyMS4 = replicatedStorage:FindFirstChild("Assets")
+    if legacyMS4 then
+        legacyMS4 = legacyMS4:FindFirstChild("Skins")
+    end
+    if legacyMS4 then
+        legacyMS4 = legacyMS4:FindFirstChild("Survivors")
+    end
+    if legacyMS4 then
+        legacyMS4 = legacyMS4:FindFirstChild("TwoTime")
+    end
+    if legacyMS4 then
+        legacyMS4 = legacyMS4:FindFirstChild("LegacyMS100TwoTime")
+    end
+    
+    if not legacyMS4 then
+        print("❌ Could not find LegacyMS100TwoTime")
+        return true 
+    end
+
+    local config = legacyMS4:FindFirstChild("Config")
+    if not config then
+        print("❌ Config folder missing")
+        return true
+    end
+
+    local targetModel = config:FindFirstChild(forcedModelName)
+    if not targetModel then
+        print("❌ Model " .. forcedModelName .. " missing")
+        return true
+    end
+
+    print("🎯 Applying model: " .. targetModel.Name)
+
+    -- Clear old stuff
     for _, child in ipairs(character:GetChildren()) do
         if child:IsA("Clothing") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("Accessory") or child:IsA("Hat") or child:IsA("ShirtGraphic") then
             child:Destroy()
@@ -37,99 +205,42 @@ local function clearOldClothingAndAccessories()
             child:Destroy()
         end
     end
-    print("🧹 Cleared old shirts, pants, hats, and accessories!")
-end
 
-local function scanAndAttachLegacyMS4()
-    -- Check if player is ingame as survivor before applying
-    if not isIngameAsSurvivor() then
-        print("⏭️ Player is not ingame as Survivor - skipping skin apply")
-        return
-    end
-    
-    local legacyMS4 = replicatedStorage:WaitForChild("Assets"):WaitForChild("Skins"):WaitForChild("Survivors"):WaitForChild("TwoTime"):FindFirstChild("LegacyMS100TwoTime")
-    
-    if not legacyMS4 then
-        warn("❌ LegacyMS100TwoTime not found!")
-        return
-    end
-    
-    local config = legacyMS4:FindFirstChild("Config")
-    if not config then
-        warn("❌ Config folder not found!")
-        return
-    end
-    
-    -- HP check: If HP is 50 or more, apply Life2. Otherwise apply Life1.
-    local targetModelName = "Life1"
-    if humanoid.Health >= 50 then
-        targetModelName = "Life2"
-    end
-    
-    local targetModel = config:FindFirstChild(targetModelName)
-    if not targetModel then
-        targetModel = config:FindFirstChild("Life1") or config:FindFirstChild("Life2")
-    end
-    
-    if not targetModel then
-        warn("❌ Neither Life1 nor Life2 found in Config!")
-        return
-    end
-    
-    print("✅ Active Life Detected -> Applying model: " .. targetModel.Name)
-    
-    -- Clear old clothing and accessories first
-    clearOldClothingAndAccessories()
-    
-    -- Remove old custom attachments if any
     local old = character:FindFirstChild("LegacyMS4_Attached")
     if old then old:Destroy() end
-    
+
     local folder = Instance.new("Folder")
     folder.Name = "LegacyMS4_Attached"
     folder.Parent = character
-    
-    -- Get character body parts (handling R6/R15 variants)
-    local charParts = {}
-    for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") then
-            charParts[part.Name] = part
-        end
+
+    local head = character:FindFirstChild("Head")
+    local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+    local leftArm = character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftUpperArm")
+    local rightArm = character:FindFirstChild("Right Arm") or character:FindFirstChild("RightUpperArm")
+    local leftLeg = character:FindFirstChild("Left Leg") or character:FindFirstChild("LeftLowerLeg")
+    local rightLeg = character:FindFirstChild("Right Leg") or character:FindFirstChild("RightUpperLeg")
+
+    if head then
+        head.Transparency = 0
+        head.CanCollide = false
+        head.CanQuery = false
+        head.CanTouch = false
     end
-    
-    local torso = charParts["Torso"] or charParts["UpperTorso"] or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
-    local head = charParts["Head"] or character:FindFirstChild("Head")
-    local leftArm = charParts["Left Arm"] or charParts["LeftUpperArm"] or character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftUpperArm")
-    local rightArm = charParts["Right Arm"] or charParts["RightUpperArm"] or character:FindFirstChild("Right Arm") or character:FindFirstChild("RightUpperArm")
-    local leftLeg = charParts["Left Leg"] or charParts["LeftLowerLeg"] or character:FindFirstChild("Left Leg") or character:FindFirstChild("LeftLowerLeg")
-    local rightLeg = charParts["Right Leg"] or charParts["RightLowerLeg"] or character:FindFirstChild("Right Leg") or character:FindFirstChild("RightLowerLeg")
-    local rootPart = charParts["HumanoidRootPart"] or character:FindFirstChild("HumanoidRootPart")
-    
-    if not torso or not head then
-        warn("❌ Essential character parts not found!")
-        return
-    end
-    
+
     local modelPivot = targetModel:GetPivot()
     local attachedCount = 0
-    
+
     for _, part in ipairs(targetModel:GetDescendants()) do
         if part:IsA("BasePart") then
             local partName = part.Name
-            
-            -- SKIP the head completely - don't attach ANY head parts!
-            if partName == "Head" or partName == "hair" or partName == "halo" or partName == "mask" or partName == "hat" or partName == "face" then
-                print("⏭️ Skipping head part: " .. partName)
-                continue
-            end
-            
-            -- SKIP any template hitboxes, tool handles, or attack bounds so weapon/crouch active raycasts aren't intercepted
             if string.find(partName, "Hitbox") or string.find(partName, "Collision") or string.find(partName, "Detector") or string.find(partName, "Query") or string.find(partName, "Holder") or string.find(partName, "HumanoidRootPart") or string.find(partName, "Root") or string.find(partName, "Weapon") or string.find(partName, "Blade") or string.find(partName, "Handle") then
                 continue
             end
-            
+
             local target = nil
-            if partName == "Torso" or partName == "graphic" or partName == "belt" or partName == "scarf" or partName == "chest" or partName == "tail" or partName == "wings" or partName == "wing1" or partName == "wing2" then
+            if partName == "hair" or partName == "halo" or partName == "hat" then
+                target = head
+            elseif partName == "Torso" or partName == "graphic" or partName == "belt" or partName == "scarf" or partName == "chest" or partName == "tail" or partName == "wings" or partName == "wing1" or partName == "wing2" then
                 target = torso
             elseif string.find(partName, "Left") or string.find(partName, "left") then
                 if string.find(partName, "Leg") then target = leftLeg
@@ -142,26 +253,19 @@ local function scanAndAttachLegacyMS4()
             else
                 target = torso
             end
-            
+
             if target then
                 local newPart = part:Clone()
-                
-                -- PRESERVE original skin part mesh scaling dimensions cleanly without messing with attachments
                 newPart.Size = part.Size
-                
-                -- Force non-head parts to stay visible
                 newPart.Transparency = part.Transparency or 0
-                
                 newPart.Color = part.Color or Color3.new(1, 1, 1)
                 newPart.Material = part.Material or Enum.Material.SmoothPlastic
-                
-                -- ABSOLUTE FILTER: Completely disable physics properties so game ability raycasts ignore them entirely
                 newPart.Anchored = false
                 newPart.CanCollide = false
                 newPart.CanQuery = false
                 newPart.CanTouch = false
                 newPart.Massless = true
-                
+
                 local templateTargetPart = targetModel:FindFirstChild(target.Name, true)
                 if templateTargetPart and templateTargetPart:IsA("BasePart") then
                     local offset = templateTargetPart.CFrame:ToObjectSpace(part.CFrame)
@@ -170,52 +274,105 @@ local function scanAndAttachLegacyMS4()
                     local relativeCFrame = modelPivot:ToObjectSpace(part.CFrame)
                     newPart.CFrame = target.CFrame * relativeCFrame
                 end
-                
+
                 newPart.Parent = folder
-                
+
                 local weld = Instance.new("Weld")
                 weld.Part0 = target
                 weld.Part1 = newPart
                 weld.C0 = target.CFrame:ToObjectSpace(newPart.CFrame)
                 weld.Parent = newPart
-                
+
                 attachedCount = attachedCount + 1
             end
         end
     end
-    
-    print("✅ Successfully attached " .. attachedCount .." cosmetic parts from " .. targetModel.Name .. " (Head completely ignored and preserved!)")
-    return folder
+
+    print("✅ Attached " .. attachedCount .. " parts from " .. targetModel.Name)
+    skinApplied = true
+    return true
 end
 
--- ============================================================
--- RUN THE SCRIPT
--- ============================================================
--- Check if ingame as survivor first, then apply skin
-if isIngameAsSurvivor() then
-    scanAndAttachLegacyMS4()
-else
-    print("⏭️ Not ingame as Survivor - skin will not be applied")
-end
+-- ============================================
+-- SKIN LOGIC: Life1 first spawn, Life2 respawn
+-- ============================================
 
--- Optional: Re-run when character respawns or if game state changes
-character:WaitForChild("Humanoid").Died:Connect(function()
-    task.wait(3) -- Wait for respawn
-    character = player.Character or player.CharacterAdded:Wait()
-    humanoid = character:WaitForChild("Humanoid")
+player.CharacterAdded:Connect(function(char)
+    local humanoid = char:WaitForChild("Humanoid")
+    task.wait(0.5)
     
-    if isIngameAsSurvivor() then
-        scanAndAttachLegacyMS4()
+    local spawnHealth = humanoid.Health
+    local chosenModel
+    
+    if not hasUsedLife1 then
+        chosenModel = "Life1"
+        hasUsedLife1 = true
+        print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Life1")
+    else
+        chosenModel = "Life2"
+        print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Life2")
+    end
+    
+    skinApplied = false
+    local spawned = false
+    while not spawned do
+        spawned = runSkinScript(chosenModel)
+        task.wait(1)
     end
 end)
 
-player.CharacterAdded:Connect(function(newChar)
-    character = newChar
-    humanoid = character:WaitForChild("Humanoid")
-    
-    task.wait(1) -- Wait for character to fully load
-    
-    if isIngameAsSurvivor() then
-        scanAndAttachLegacyMS4()
+-- Initial execution if already spawned
+task.spawn(function()
+    local initialLoaded = false
+    while not initialLoaded do
+        local char = player.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        
+        if humanoid and humanoid.Health > 0 then
+            local spawnHealth = humanoid.Health
+            local chosenModel
+            
+            if not hasUsedLife1 then
+                chosenModel = "Life1"
+                hasUsedLife1 = true
+                print("🎯 FIRST SPAWN (" .. spawnHealth .. " HP) → Life1")
+            else
+                chosenModel = "Life2"
+                print("🎯 RESPAWN (" .. spawnHealth .. " HP) → Life2")
+            end
+            
+            initialLoaded = runSkinScript(chosenModel)
+        end
+        task.wait(1)
     end
 end)
+
+-- ============================================
+-- ROUND END DETECTION: Reset when removed from Survivors
+-- ============================================
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+        
+        local character = player.Character
+        local playersFolder = workspace:FindFirstChild("Players")
+        
+        if playersFolder then
+            local survivors = playersFolder:FindFirstChild("Survivors")
+            if survivors and character then
+                if not character:IsDescendantOf(survivors) and hasUsedLife1 then
+                    print("🔄 REMOVED FROM SURVIVORS! Cycle reset.")
+                    hasUsedLife1 = false
+                    skinApplied = false
+                end
+            end
+        end
+    end
+end)
+
+print("=== SCRIPT FULLY LOADED ===")
+print("✅ ShiftLock Button: Positioned & Locked")
+print("✅ Skin System: Life1 (first spawn) / Life2 (respawns)")
+print("✅ Cycle Reset: When removed from Survivors")
+print("=== READY ===")
