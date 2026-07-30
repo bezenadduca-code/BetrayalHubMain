@@ -14,35 +14,31 @@ local isProcessing = false
 local localPlayerName = player.Name
 
 local function changeTwoTimeIcon()
-    local success = false
-    local attempts = 0
+    local tempUI = playerGui:FindFirstChild("TemporaryUI")
+    if not tempUI then return false end
     
-    while not success and attempts < 20 do
-        attempts = attempts + 1
-        local tempUI = playerGui:FindFirstChild("TemporaryUI")
-        if tempUI then
-            local playerInfo = tempUI:FindFirstChild("PlayerInfo")
-            if playerInfo then
-                local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
-                if currentSurvivors then
-                    local twoTime = currentSurvivors:FindFirstChild("TwoTime")
-                    if twoTime then
-                        local icon = twoTime:FindFirstChild("Icon")
-                        if icon and icon:IsA("ImageLabel") then
-                            icon.Image = "rbxassetid://85628434666828"
-                            success = true
-                            break
-                        end
+    local playerInfo = tempUI:FindFirstChild("PlayerInfo")
+    if not playerInfo then return false end
+    
+    local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
+    if not currentSurvivors then return false end
+    
+    for _, frame in ipairs(currentSurvivors:GetChildren()) do
+        if frame:IsA("Frame") then
+            local username = frame:FindFirstChild("Username")
+            if username and username:IsA("TextLabel") then
+                if string.find(username.Text, localPlayerName) then
+                    local icon = frame:FindFirstChild("Icon")
+                    if icon and icon:IsA("ImageLabel") then
+                        icon.Image = "rbxassetid://85628434666828"
+                        return true
                     end
                 end
             end
         end
-        if not success then
-            task.wait(0.5)
-        end
     end
     
-    return success
+    return false
 end
 
 local function findButton()
@@ -153,13 +149,18 @@ playerGui.DescendantAdded:Connect(function(descendant)
 end)
 
 playerGui.DescendantAdded:Connect(function(descendant)
-    if descendant.Name == "TwoTime" and descendant:IsA("Folder") then
+    if descendant.Name == "TwoTime" and descendant:IsA("Frame") then
         task.wait(0.2)
         changeTwoTimeIcon()
     elseif descendant.Name == "Icon" and descendant:IsA("ImageLabel") then
         local parent = descendant.Parent
-        if parent and parent.Name == "TwoTime" then
-            descendant.Image = "rbxassetid://85628434666828"
+        if parent and parent:IsA("Frame") then
+            local username = parent:FindFirstChild("Username")
+            if username and username:IsA("TextLabel") then
+                if string.find(username.Text, localPlayerName) then
+                    descendant.Image = "rbxassetid://85628434666828"
+                end
+            end
         end
     end
 end)
@@ -173,11 +174,17 @@ task.spawn(function()
             if playerInfo then
                 local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
                 if currentSurvivors then
-                    local twoTime = currentSurvivors:FindFirstChild("TwoTime")
-                    if twoTime then
-                        local icon = twoTime:FindFirstChild("Icon")
-                        if icon and icon:IsA("ImageLabel") and icon.Image ~= "rbxassetid://85628434666828" then
-                            icon.Image = "rbxassetid://85628434666828"
+                    for _, frame in ipairs(currentSurvivors:GetChildren()) do
+                        if frame:IsA("Frame") then
+                            local username = frame:FindFirstChild("Username")
+                            if username and username:IsA("TextLabel") then
+                                if string.find(username.Text, localPlayerName) then
+                                    local icon = frame:FindFirstChild("Icon")
+                                    if icon and icon:IsA("ImageLabel") and icon.Image ~= "rbxassetid://85628434666828" then
+                                        icon.Image = "rbxassetid://85628434666828"
+                                    end
+                                end
+                            end
                         end
                     end
                 end
