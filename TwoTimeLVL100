@@ -12,7 +12,8 @@ local buttonName = "ShiftLockButton"
 local newPosition = UDim2.new(1.0, -148.0, 1.0, -4.0)
 local newSize = UDim2.new(0.0, 60.0, 0.0, 60.0)
 
-local hasUsedLife2 = false
+local hasUsedLife1 = false  -- Track if they've used Life1
+local hasUsedLife2 = false  -- Track if they've used Life2
 local isProcessing = false
 
 -- Find the player's respawn location: workspace.Map.Ingame.[USERNAME]RespawnLocation
@@ -58,14 +59,28 @@ end
 local respawnPart = findPlayerRespawnLocation()
 
 -- Function to check if player is at their respawn location
+-- Handles both: spawning ON the part (normal) and spawning UNDER the part (LMS)
 local function isAtRespawn(character)
     if not character or not respawnPart then return false end
     
     local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
     if not humanoidRootPart then return false end
     
-    local distance = (humanoidRootPart.Position - respawnPart.Position).Magnitude
-    return distance < 15
+    local charPos = humanoidRootPart.Position
+    local respawnPos = respawnPart.Position
+    
+    -- Check distance (normal spawn)
+    local distance = (charPos - respawnPos).Magnitude
+    
+    -- Check if directly above (LMS mode - spawn under feet)
+    local isAbove = math.abs(charPos.X - respawnPos.X) < 5 and math.abs(charPos.Z - respawnPos.Z) < 5
+    
+    -- If distance is small OR they're directly above the respawn part
+    if distance < 15 or isAbove then
+        return true
+    end
+    
+    return false
 end
 
 -- Function to change the TwoTime icon
@@ -242,6 +257,32 @@ local function shouldIgnorePart(partName)
     return false
 end
 
+-- Function to prevent default accessories from loading
+local function preventDefaultAccessories(character)
+    -- This function runs immediately when character is added to prevent accessories
+    local function removeAccessories()
+        for _, child in ipairs(character:GetChildren()) do
+            if child:IsA("Accessory") or child:IsA("Hat") then
+                child:Destroy()
+            end
+        end
+    end
+    
+    -- Remove immediately
+    removeAccessories()
+    
+    -- Set up a listener to catch any accessories that get added later
+    character.ChildAdded:Connect(function(child)
+        if child:IsA("Accessory") or child:IsA("Hat") then
+            -- Only remove if it's not part of our skin
+            if child.Name ~= "LegacyMS4_Attached" then
+                task.wait(0.1) -- Small delay to ensure it's fully loaded
+                child:Destroy()
+            end
+        end
+    end)
+end
+
 -- Function to apply skin (Life1 or Life2)
 local function runSkinScript(forcedModelName)
     local character = player.Character
@@ -305,7 +346,7 @@ local function runSkinScript(forcedModelName)
 
     print("🔄 Applying " .. forcedModelName .. " for " .. localPlayerName)
 
-    -- REMOVE ALL ACCESSORIES AND OLD SKIN
+    -- REMOVE ALL ACCESSORIES AND OLD SKIN (for BOTH Life1 AND Life2)
     local attachmentsToRemove = {}
     
     for _, child in ipairs(character:GetChildren()) do
@@ -431,13 +472,23 @@ local function applySkin()
     isProcessing = true
     
     local chosenModel
-    if not hasUsedLife2 then
-        chosenModel = "Life1"
-    else
-        chosenModel = "Life2"
-    end
     
-    print("🔄 Applying " .. chosenModel .. " for " .. localPlayerName)
+    -- LOGIC FIXED:
+    -- If they haven't used Life1 yet → apply Life1
+    -- If they HAVE used Life1 AND they're at respawn → apply Life2
+    if not hasUsedLife1 then
+        chosenModel = "Life1"
+        hasUsedLife1 = true
+        print("🔄 First life: Applying Life1 for " .. localPlayerName)
+    elseif hasUsedLife1 and not hasUsedLife2 then
+        chosenModel = "Life2"
+        hasUsedLife2 = true
+        print("🔄 Second life: Applying Life2 for " .. localPlayerName)
+    else
+        -- Already used both, just keep Life2
+        chosenModel = "Life2"
+        print("🔄 Already used Life2, keeping Life2 for " .. localPlayerName)
+    end
     
     local success = false
     local attempts = 0
@@ -457,7 +508,10 @@ end
 
 -- Handle character spawn/respawn
 player.CharacterAdded:Connect(function(char)
-    task.wait(1) -- Wait for character to fully load
+    -- IMPORTANT: Set up accessory prevention IMMEDIATELY
+    preventDefaultAccessories(char)
+    
+    task.wait(0.5) -- Reduced wait time
     
     local character = player.Character
     if not character then return end
@@ -467,21 +521,26 @@ player.CharacterAdded:Connect(function(char)
         print("🔴 " .. localPlayerName .. " spawned at their respawn location!")
         print("📍 Position: " .. tostring(character.HumanoidRootPart.Position))
         
-        -- If they already used Life1, apply Life2
-        if hasUsedLife2 then
+        -- If they've already used Life1, apply Life2
+        if hasUsedLife1 and not hasUsedLife2 then
             print("🔄 Applying Life2 (second life)...")
             applySkin()
             changeTwoTimeIcon()
+        elseif not hasUsedLife1 then
+            print("🔄 First spawn at respawn - Applying Life1")
+            applySkin()
         else
-            print("🔄 Applying Life1 (first life)...")
-            hasUsedLife2 = true
+            print("🔄 Already used Life2, keeping it")
             applySkin()
         end
     else
-        -- Normal spawn, apply Life1
-        if not hasUsedLife2 then
-            print("🔄 Applying Life1 (first life)...")
-            hasUsedLife2 = true
+        -- Normal spawn (not at respawn)
+        if not hasUsedLife1 then
+            print("🔄 First spawn (not at respawn) - Applying Life1")
+            applySkin()
+        else
+            print("🔄 Spawned normally - Keeping current skin")
+            -- Just re-apply whatever skin they have
             applySkin()
         end
     end
