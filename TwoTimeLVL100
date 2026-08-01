@@ -3,6 +3,10 @@ local replicatedStorage = game:GetService("ReplicatedStorage")
 local player = players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Get the local player's username
+local localPlayerName = player.Name
+print("🎮 Player: " .. localPlayerName)
+
 local buttonPath = "MainUI.ShiftLockButton"
 local buttonName = "ShiftLockButton"
 local newPosition = UDim2.new(1.0, -148.0, 1.0, -4.0)
@@ -11,8 +15,60 @@ local newSize = UDim2.new(0.0, 60.0, 0.0, 60.0)
 local hasUsedLife2 = false
 local isProcessing = false
 
-local localPlayerName = player.Name
+-- Find the player's respawn location: workspace.Map.Ingame.[USERNAME]RespawnLocation
+local function findPlayerRespawnLocation()
+    local map = workspace:FindFirstChild("Map")
+    if not map then 
+        print("❌ Map not found")
+        return nil 
+    end
+    
+    local ingame = map:FindFirstChild("Ingame")
+    if not ingame then 
+        print("❌ Ingame not found")
+        return nil 
+    end
+    
+    -- Look for: [USERNAME]RespawnLocation
+    local respawnName = localPlayerName .. "RespawnLocation"
+    local respawnPart = ingame:FindFirstChild(respawnName)
+    
+    if respawnPart then
+        print("📍 Found respawn location: " .. respawnName)
+        print("📍 Position: " .. tostring(respawnPart.Position))
+        return respawnPart
+    else
+        print("⚠️ Could not find: " .. respawnName)
+        print("   Available respawn locations:")
+        local found = false
+        for _, child in ipairs(ingame:GetChildren()) do
+            if string.find(child.Name, "RespawnLocation") then
+                print("     - " .. child.Name)
+                found = true
+            end
+        end
+        if not found then
+            print("     No respawn locations found in workspace.Map.Ingame")
+        end
+        return nil
+    end
+end
 
+-- Find the respawn location
+local respawnPart = findPlayerRespawnLocation()
+
+-- Function to check if player is at their respawn location
+local function isAtRespawn(character)
+    if not character or not respawnPart then return false end
+    
+    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return false end
+    
+    local distance = (humanoidRootPart.Position - respawnPart.Position).Magnitude
+    return distance < 15
+end
+
+-- Function to change the TwoTime icon
 local function changeTwoTimeIcon()
     local tempUI = playerGui:FindFirstChild("TemporaryUI")
     if not tempUI then return false end
@@ -41,6 +97,7 @@ local function changeTwoTimeIcon()
     return false
 end
 
+-- Function to find the shiftlock button
 local function findButton()
     local function findGuiByPath(path)
         local parts = {}
@@ -76,6 +133,7 @@ local function findButton()
     return button
 end
 
+-- Function to position the button
 local function positionButton(button)
     if not button then
         button = findButton()
@@ -89,6 +147,7 @@ local function positionButton(button)
     return false
 end
 
+-- Function to track button position
 local function setupButtonTracker(button)
     if not button then return end
     
@@ -113,86 +172,7 @@ local function setupButtonTracker(button)
     end)
 end
 
-task.spawn(function()
-    task.wait(1)
-    local button = findButton()
-    if button then
-        positionButton(button)
-        setupButtonTracker(button)
-    end
-end)
-
-playerGui.DescendantAdded:Connect(function(descendant)
-    if descendant.Name == buttonName and 
-       (descendant:IsA("GuiButton") or descendant:IsA("TextButton") or descendant:IsA("ImageButton")) then
-        task.wait(0.1)
-        positionButton(descendant)
-        setupButtonTracker(descendant)
-    end
-end)
-
-task.spawn(function()
-    while true do
-        task.wait(3)
-        local button = findButton()
-        if button then
-            positionButton(button)
-        end
-    end
-end)
-
-playerGui.DescendantAdded:Connect(function(descendant)
-    if descendant.Name == "TemporaryUI" and descendant:IsA("ScreenGui") then
-        task.wait(0.5)
-        changeTwoTimeIcon()
-    end
-end)
-
-playerGui.DescendantAdded:Connect(function(descendant)
-    if descendant.Name == "TwoTime" and descendant:IsA("Frame") then
-        task.wait(0.2)
-        changeTwoTimeIcon()
-    elseif descendant.Name == "Icon" and descendant:IsA("ImageLabel") then
-        local parent = descendant.Parent
-        if parent and parent:IsA("Frame") then
-            local username = parent:FindFirstChild("Username")
-            if username and username:IsA("TextLabel") then
-                if string.find(username.Text, localPlayerName) then
-                    descendant.Image = "rbxassetid://85628434666828"
-                end
-            end
-        end
-    end
-end)
-
-task.spawn(function()
-    while true do
-        task.wait(5)
-        local tempUI = playerGui:FindFirstChild("TemporaryUI")
-        if tempUI then
-            local playerInfo = tempUI:FindFirstChild("PlayerInfo")
-            if playerInfo then
-                local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
-                if currentSurvivors then
-                    for _, frame in ipairs(currentSurvivors:GetChildren()) do
-                        if frame:IsA("Frame") then
-                            local username = frame:FindFirstChild("Username")
-                            if username and username:IsA("TextLabel") then
-                                if string.find(username.Text, localPlayerName) then
-                                    local icon = frame:FindFirstChild("Icon")
-                                    if icon and icon:IsA("ImageLabel") and icon.Image ~= "rbxassetid://85628434666828" then
-                                        icon.Image = "rbxassetid://85628434666828"
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
+-- Function to check if object is a weapon/dagger
 local function isDaggerOrWeapon(child)
     if not child then return false end
     
@@ -240,6 +220,7 @@ local function isDaggerOrWeapon(child)
     return false
 end
 
+-- Function to check if part should be ignored
 local function shouldIgnorePart(partName)
     if not partName then return true end
     
@@ -261,6 +242,7 @@ local function shouldIgnorePart(partName)
     return false
 end
 
+-- Function to apply skin (Life1 or Life2)
 local function runSkinScript(forcedModelName)
     local character = player.Character
     if not character then 
@@ -288,6 +270,7 @@ local function runSkinScript(forcedModelName)
         return false 
     end
 
+    -- Find the skin models
     local legacyMS4 = replicatedStorage:FindFirstChild("Assets")
     if legacyMS4 then
         legacyMS4 = legacyMS4:FindFirstChild("Skins")
@@ -303,69 +286,62 @@ local function runSkinScript(forcedModelName)
     end
     
     if not legacyMS4 then
+        print("❌ Could not find skin folder!")
         return true 
     end
 
     local config = legacyMS4:FindFirstChild("Config")
     if not config then
+        print("❌ Could not find Config folder!")
         return true
     end
 
+    -- Get the correct model (Life1 or Life2)
     local targetModel = config:FindFirstChild(forcedModelName)
     if not targetModel then
+        print("❌ Could not find model: " .. forcedModelName)
         return true
     end
 
+    print("🔄 Applying " .. forcedModelName .. " for " .. localPlayerName)
+
+    -- REMOVE ALL ACCESSORIES AND OLD SKIN
     local attachmentsToRemove = {}
+    
     for _, child in ipairs(character:GetChildren()) do
-        if isDaggerOrWeapon(child) then
-            continue
-        end
-        
+        -- Skip essential parts
         if child.Name == "Head" then
             continue
         end
         
-        if child.Name == "LegacyMS4_Attached" then
+        if child.Name == "Humanoid" or child:IsA("Humanoid") then
             continue
         end
         
-        if child:IsA("Clothing") or child:IsA("Shirt") or child:IsA("Pants") or 
-           child:IsA("Accessory") or child:IsA("Hat") or child:IsA("ShirtGraphic") then
+        -- Skip weapons/daggers
+        if isDaggerOrWeapon(child) then
+            continue
+        end
+        
+        -- Remove ALL attachments, accessories, clothing, and models
+        if child:IsA("Accessory") or child:IsA("Hat") or child:IsA("Clothing") or 
+           child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or
+           child.Name == "LegacyMS4_Attached" or child:IsA("Model") then
             table.insert(attachmentsToRemove, child)
-        elseif child:IsA("Model") then
-            local isWeapon = false
-            for _, part in ipairs(child:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    local partName = part.Name
-                    if string.find(partName, "Blade") or string.find(partName, "Handle") or 
-                       string.find(partName, "Dagger") or string.find(partName, "GhostFire") or
-                       string.find(partName, "Hitbox") or string.find(partName, "Collision") or
-                       string.find(partName, "Crouch") then
-                        isWeapon = true
-                        break
-                    end
-                end
-            end
-            if not isWeapon then
-                table.insert(attachmentsToRemove, child)
-            end
         end
     end
     
+    -- Destroy all collected items
     for _, item in ipairs(attachmentsToRemove) do
         item:Destroy()
     end
 
-    local old = character:FindFirstChild("LegacyMS4_Attached")
-    if old then 
-        old:Destroy() 
-    end
-
+    -- Create new folder for skin parts
     local folder = Instance.new("Folder")
     folder.Name = "LegacyMS4_Attached"
     folder.Parent = character
 
+    -- Get body parts
     local head = character:FindFirstChild("Head")
     local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
     local leftArm = character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftUpperArm")
@@ -382,6 +358,7 @@ local function runSkinScript(forcedModelName)
 
     local modelPivot = targetModel:GetPivot()
 
+    -- Apply skin parts
     for _, part in ipairs(targetModel:GetDescendants()) do
         if part:IsA("BasePart") then
             local partName = part.Name
@@ -448,6 +425,7 @@ local function runSkinScript(forcedModelName)
     return true
 end
 
+-- Function to apply the correct skin
 local function applySkin()
     if isProcessing then return end
     isProcessing = true
@@ -458,6 +436,8 @@ local function applySkin()
     else
         chosenModel = "Life2"
     end
+    
+    print("🔄 Applying " .. chosenModel .. " for " .. localPlayerName)
     
     local success = false
     local attempts = 0
@@ -473,54 +453,88 @@ local function applySkin()
     return success
 end
 
-player.CharacterAdded:Connect(function(char)
-    task.wait(0.5)
-    
-    if hasUsedLife2 then
-        hasUsedLife2 = false
-    end
-    
-    applySkin()
-end)
+-- ===== MAIN SCRIPT =====
 
-local hasBeenAlive = false
-
+-- Handle character spawn/respawn
 player.CharacterAdded:Connect(function(char)
-    task.wait(0.5)
+    task.wait(1) -- Wait for character to fully load
     
     local character = player.Character
     if not character then return end
     
-    local playersFolder = workspace:FindFirstChild("Players")
-    if not playersFolder then return end
-    
-    local survivors = playersFolder:FindFirstChild("Survivors")
-    if not survivors then return end
-    
-    if character:IsDescendantOf(survivors) then
-        if hasBeenAlive and not hasUsedLife2 then
-            hasUsedLife2 = true
-        end
+    -- Check if player is at their respawn location
+    if respawnPart and isAtRespawn(character) then
+        print("🔴 " .. localPlayerName .. " spawned at their respawn location!")
+        print("📍 Position: " .. tostring(character.HumanoidRootPart.Position))
         
-        applySkin()
-        hasBeenAlive = true
+        -- If they already used Life1, apply Life2
+        if hasUsedLife2 then
+            print("🔄 Applying Life2 (second life)...")
+            applySkin()
+            changeTwoTimeIcon()
+        else
+            print("🔄 Applying Life1 (first life)...")
+            hasUsedLife2 = true
+            applySkin()
+        end
     else
-        hasBeenAlive = false
-        hasUsedLife2 = false
+        -- Normal spawn, apply Life1
+        if not hasUsedLife2 then
+            print("🔄 Applying Life1 (first life)...")
+            hasUsedLife2 = true
+            applySkin()
+        end
+    end
+end)
+
+-- Button positioning
+task.spawn(function()
+    task.wait(1)
+    local button = findButton()
+    if button then
+        positionButton(button)
+        setupButtonTracker(button)
+    end
+end)
+
+playerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == buttonName and 
+       (descendant:IsA("GuiButton") or descendant:IsA("TextButton") or descendant:IsA("ImageButton")) then
+        task.wait(0.1)
+        positionButton(descendant)
+        setupButtonTracker(descendant)
     end
 end)
 
 task.spawn(function()
     while true do
-        task.wait(2)
-        local character = player.Character
-        local playersFolder = workspace:FindFirstChild("Players")
-        if playersFolder then
-            local survivors = playersFolder:FindFirstChild("Survivors")
-            if survivors and character then
-                if not character:IsDescendantOf(survivors) then
-                    hasBeenAlive = false
-                    hasUsedLife2 = false
+        task.wait(3)
+        local button = findButton()
+        if button then
+            positionButton(button)
+        end
+    end
+end)
+
+-- Icon changes
+playerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == "TemporaryUI" and descendant:IsA("ScreenGui") then
+        task.wait(0.5)
+        changeTwoTimeIcon()
+    end
+end)
+
+playerGui.DescendantAdded:Connect(function(descendant)
+    if descendant.Name == "TwoTime" and descendant:IsA("Frame") then
+        task.wait(0.2)
+        changeTwoTimeIcon()
+    elseif descendant.Name == "Icon" and descendant:IsA("ImageLabel") then
+        local parent = descendant.Parent
+        if parent and parent:IsA("Frame") then
+            local username = parent:FindFirstChild("Username")
+            if username and username:IsA("TextLabel") then
+                if string.find(username.Text, localPlayerName) then
+                    descendant.Image = "rbxassetid://85628434666828"
                 end
             end
         end
@@ -528,11 +542,30 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    task.wait(1)
-    if player.Character then
-        hasBeenAlive = false
-        hasUsedLife2 = false
-        applySkin()
+    while true do
+        task.wait(5)
+        local tempUI = playerGui:FindFirstChild("TemporaryUI")
+        if tempUI then
+            local playerInfo = tempUI:FindFirstChild("PlayerInfo")
+            if playerInfo then
+                local currentSurvivors = playerInfo:FindFirstChild("CurrentSurvivors")
+                if currentSurvivors then
+                    for _, frame in ipairs(currentSurvivors:GetChildren()) do
+                        if frame:IsA("Frame") then
+                            local username = frame:FindFirstChild("Username")
+                            if username and username:IsA("TextLabel") then
+                                if string.find(username.Text, localPlayerName) then
+                                    local icon = frame:FindFirstChild("Icon")
+                                    if icon and icon:IsA("ImageLabel") and icon.Image ~= "rbxassetid://85628434666828" then
+                                        icon.Image = "rbxassetid://85628434666828"
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
 end)
 
@@ -540,3 +573,11 @@ task.spawn(function()
     task.wait(2)
     changeTwoTimeIcon()
 end)
+
+print("✅ TwoTime script loaded for: " .. localPlayerName)
+if respawnPart then
+    print("📍 Monitoring respawn at: " .. respawnPart.Name)
+    print("📍 Position: " .. tostring(respawnPart.Position))
+else
+    print("⚠️ No respawn location found for: " .. localPlayerName)
+end
