@@ -1,4 +1,3 @@
-
 print("betrayalhub loading...")
 
 -- ============================================================
@@ -3039,8 +3038,7 @@ local function musicFetchAsync(name, cb)
     musicFetchInFlight[name] = true
     task.spawn(function()
         local asset = musicFetch(name)
-        musicFetchInFlight[name] = nil
-        if asset and cb then cb(asset) end
+        musicFetchInFlight[name] = nil        if asset and cb then cb(asset) end
     end)
 end
 
@@ -4427,6 +4425,8 @@ local guestCfg = {
     autoPunchOn = false, aimPunchActive = false,
     punchPrediction = 2.3, customPunchSoundId = 0, aimPunchDuration = 0.5,
     cinematicTextEnabled = false, cinematicText = "PARRY!",
+    -- FIXED: Added soundBlockEnabled flag
+    soundBlockEnabled = false,
 }
 
 local g = {
@@ -4669,8 +4669,10 @@ local g_trackedPunchAnims = {
     ["100184164753080"]=true,
 }
 
+-- FIXED: g_attemptBlockForSound now properly checks soundBlockEnabled
 local function g_attemptBlockForSound(sound, preId)
-    if not guestCfg.autoBlockOn or not sound or not sound:IsA("Sound") then return end
+    if not guestCfg.soundBlockEnabled then return end
+    
     local id = preId or g_extractId(sound)
     if not id or not g_triggerSounds[id] then return end
     if not g_isBlockReady() then return end
@@ -4690,7 +4692,14 @@ local function g_attemptBlockForSound(sound, preId)
     local effRange = guestCfg.detectionRange + 0.2 * guestCfg.detectionRange
     if distSq > effRange * effRange then return end
     
-    if not isFacing(root, hrp, killer.Name) then return end
+    if guestCfg.verifyFacingCheck then
+        local dir = (root.Position - hrp.Position)
+        if dir.Magnitude > 0.01 then
+            local dot = hrp.CFrame.LookVector:Dot(dir.Unit)
+            local cosA = math.cos(math.rad(guestCfg.visionAngle / 2))
+            if distSq >= 25 and dot < cosA then return end
+        end
+    end
     
     if guestCfg.blockDelay and guestCfg.blockDelay > 0 then
         task.wait(guestCfg.blockDelay)
@@ -4704,13 +4713,14 @@ end
 
 local g_autoBlockLastCheck = {}
 
+-- FIXED: g_hookSound now properly checks soundBlockEnabled
 local function g_hookSound(sound)
     if not sound or not sound:IsA("Sound") or g.soundHooks[sound] then return end
     local preId = g_extractId(sound)
     if not preId then return end
     
     local pc = sound.Played:Connect(function()
-        if guestCfg.autoBlockOn then
+        if guestCfg.soundBlockEnabled then
             local now = tick()
             if not g_autoBlockLastCheck[preId] or (now - g_autoBlockLastCheck[preId]) > 0.05 then
                 g_autoBlockLastCheck[preId] = now
@@ -4719,7 +4729,7 @@ local function g_hookSound(sound)
         end
     end)
     local pp = sound:GetPropertyChangedSignal("IsPlaying"):Connect(function()
-        if sound.IsPlaying and guestCfg.autoBlockOn then
+        if sound.IsPlaying and guestCfg.soundBlockEnabled then
             local now = tick()
             if not g_autoBlockLastCheck[preId] or (now - g_autoBlockLastCheck[preId]) > 0.05 then
                 g_autoBlockLastCheck[preId] = now
@@ -4734,7 +4744,7 @@ local function g_hookSound(sound)
         g.soundBlockedUntil[sound] = nil
     end)
     g.soundHooks[sound] = {pc, pp, dc, id = preId}
-    if sound.IsPlaying then
+    if sound.IsPlaying and guestCfg.soundBlockEnabled then
         local now = tick()
         if not g_autoBlockLastCheck[preId] or (now - g_autoBlockLastCheck[preId]) > 0.05 then
             g_autoBlockLastCheck[preId] = now
@@ -5175,6 +5185,7 @@ local TRIGGER_ANIMS = {
     ["133398613783505"]=true,["87259391926321"]=true,
     ["88451353906104"]=true,
     ["135853087227453"]=true,
+    ["123172382755876"]=true,
 }
 
 local function getKillersFolder()
@@ -5486,14 +5497,96 @@ if not guestCfg.hitboxMargin then guestCfg.hitboxMargin = 0.05 end
 if not guestCfg.doubleBlock then guestCfg.doubleBlock = true end
 if not guestCfg.blockType then guestCfg.blockType = "Block" end
 
--- Sound Block is placed ABOVE Hitbox Auto-Block in the CORE UI
-secCore:Toggle({ Title="Sound Block", Type="Checkbox", Flag="guestSoundBlockEnabled", Default=false,
+-- FIXED: Sound Block toggle now properly sets the flag and hooks sounds
+secCore:Toggle({ 
+    Title="Sound Block", 
+    Type="Checkbox", 
+    Flag="guestSoundBlockEnabled", 
+    Default=false,
     Callback=function(v) 
+        guestCfg.soundBlockEnabled = v
+        guestCfg.autoBlockOn = v
+        
         if v then
-            -- Enable sound block with auto-block's sound detection
-            guestCfg.autoBlockOn = true
+            print("[Guest Block] 🔊 Sound Block ENABLED - Listening for attack sounds...")
+            
+            -- Force re-hook all existing sounds
+            pcall(function()
+                local kf = getTeamFolder("Killers")
+                if kf then
+                    for _, killer in pairs(kf:GetChildren()) do
+                        for _, d in pairs(killer:GetDescendants()) do
+                            if d:IsA("Sound") then
+                                -- Clear any existing hooks for this sound
+                                if g.soundHooks[d] then
+                                    for _, conn in ipairs(g.soundHooks[d]) do
+                                        if type(conn) ~= "string" and conn and conn.Disconnect then
+                                            pcall(function() conn:Disconnect() end)
+                                        end
+                                    end
+                                    g.soundHooks[d] = nil
+                                    g.soundBlockedUntil[d] = nil
+                                end
+                                pcall(g_hookSound, d)
+                            end
+                        end
+                    end
+                end
+                print("[Guest Block] ✅ Sound hooks refreshed")
+            end)
+        else
+            print("[Guest Block] 🔇 Sound Block DISABLED")
+            -- Clean up sound hooks
+            pcall(function()
+                for sound in pairs(g.soundHooks) do
+                    pcall(function()
+                        if g.soundHooks[sound] then
+                            for _, conn in ipairs(g.soundHooks[sound]) do
+                                if type(conn) ~= "string" and conn and conn.Disconnect then
+                                    pcall(function() conn:Disconnect() end)
+                                end
+                            end
+                        end
+                    end)
+                    g.soundHooks[sound] = nil
+                    g.soundBlockedUntil[sound] = nil
+                end
+            end)
         end
-    end })
+    end 
+})
+
+-- Test button to debug sound detection
+secCore:Button({ 
+    Title = "🔊 Test Sound Detection", 
+    Callback = function()
+        print("[Sound Block] 🔍 Scanning for sounds...")
+        local count = 0
+        local hooked = 0
+        local kf = getTeamFolder("Killers")
+        if kf then
+            for _, killer in pairs(kf:GetChildren()) do
+                for _, d in pairs(killer:GetDescendants()) do
+                    if d:IsA("Sound") then
+                        count = count + 1
+                        local id = g_extractId(d)
+                        local isTriggered = id and g_triggerSounds[id]
+                        print("  Sound:", d.Name, "ID:", id or "unknown", 
+                              "Triggered:", isTriggered and "✅ YES" or "❌ NO",
+                              "Hooked:", g.soundHooks[d] and "✅" or "❌")
+                        if g.soundHooks[d] then hooked = hooked + 1 end
+                    end
+                end
+            end
+        end
+        print("[Sound Block] Found " .. count .. " sounds, " .. hooked .. " hooked")
+        ui:Notify({
+            Title = "Sound Scan Complete",
+            Content = "Found " .. count .. " sounds, " .. hooked .. " hooked",
+            Duration = 3
+        })
+    end 
+})
 
 secCore:Toggle({ 
     Title = "Enable Hitbox Auto-Block", 
@@ -6942,9 +7035,8 @@ end })
 
 end -- tabGuestMobility
 
-
 -- ============================================================
--- VEERONICA TAB (NEW)
+-- VEERONICA TAB
 -- ============================================================
 
 do -- tabVeeronica
@@ -7301,19 +7393,8 @@ secFastSpray:Toggle({
 end -- tabVeeronica
 
 -- ============================================================
--- GUEST 1337 - AIM PUNCH (COMPLETELY MISSING FROM BETRAYALHUB)
--- ============================================================
-
-
-
--- ============================================================
--- INTERFACE TAB
--- ============================================================
-
-do -- tabInterface
-----------------------------------------------------------------
 -- TWO TIME TAB
-----------------------------------------------------------------
+-- ============================================================
 do -- tabTwoTime
 local tabTwoTime = win:Tab({ Title = "TwoTime", Icon = "sword" })
 local secTwoTime = tabTwoTime:Section({ Title = "Settings", Opened = true })
@@ -8025,6 +8106,10 @@ secTwoTime:Button({ Title = "Unload TwoTime",
 
 end -- tabTwoTime
 
+-- ============================================================
+-- INTERFACE TAB
+-- ============================================================
+
 local tabInterface = win:Tab({ Title = "Interface", Icon = "scan" })
 local secUIFunctions = tabInterface:Section({ Title = "UI Functions", Opened = true })
 
@@ -8121,8 +8206,6 @@ secConfigShare:Button({
     Callback = function() pcall(function() v1prConfig:Save(); print("[betrayalhub] Config saved") end) end
 })
 
-end -- tabInterface
-
 -- ============================================================
 -- CONFIG APPLY
 -- ============================================================
@@ -8176,12 +8259,10 @@ function applyConfigFromFlags()
         if win.Flags.musicSel ~= nil then music.selected=win.Flags.musicSel end
         if win.Flags.jdEnabled ~= nil then jd_enabled=win.Flags.jdEnabled end
         if win.Flags.jdSilentAim ~= nil then jd_aimbotOn=win.Flags.jdSilentAim end
-        if win.Flags.jdCrystalAutoHold ~= nil then jd_crystalAutoHold=win.Flags.jdCrystalAutoHold end
         if type(win.Flags.jdAimOffset)=="number" then jd_AIM_OFFSET=win.Flags.jdAimOffset end
         if type(win.Flags.jdPrediction)=="number" then jd_PREDICTION=win.Flags.jdPrediction end
         if win.Flags.jdAxeEnabled ~= nil then jd_axeEnabled=win.Flags.jdAxeEnabled end
         if type(win.Flags.jdAxeLockDur)=="number" then jd_AXE_LOCK_DURATION=win.Flags.jdAxeLockDur end
-        if win.Flags.jdInstantCrystal ~= nil then jd_toggleInstantCrystal(win.Flags.jdInstantCrystal) end
         if win.Flags.elliotEnabled ~= nil then elliotEnabled=win.Flags.elliotEnabled; if elliotEnabled then elliotStartAimbot() end end
         if win.Flags.elliotRequireAnim ~= nil then elliotRequireAnim=win.Flags.elliotRequireAnim end
         if win.Flags.elliotShowArc ~= nil then elliotShowArc=win.Flags.elliotShowArc end
@@ -8227,22 +8308,38 @@ function applyConfigFromFlags()
         if win.Flags.guestNoclipOnlyWhenBlockReady ~= nil then guestCfg.noclipOnlyWhenBlockReady=win.Flags.guestNoclipOnlyWhenBlockReady end
         if win.Flags.guestFpsCounterEnabled ~= nil then guestCfg.fpsCounterEnabled=win.Flags.guestFpsCounterEnabled end
         if win.Flags.guestPingCheckerEnabled ~= nil then guestCfg.pingCheckerEnabled=win.Flags.guestPingCheckerEnabled end
-        if win.Flags.guestHitboxEnabled ~= nil then guestAutoCfg.hitboxEnabled=win.Flags.guestHitboxEnabled; if guestAutoCfg.hitboxEnabled then setupHitboxBlock() end end
-        if win.Flags.guestAnimEnabled ~= nil then guestAutoCfg.animEnabled=win.Flags.guestAnimEnabled; if guestAutoCfg.animEnabled then setupAnimBlock() end end
-        if type(win.Flags.guestHitboxX)=="number" then guestAutoCfg.hitboxSize=Vector3.new(win.Flags.guestHitboxX, guestAutoCfg.hitboxSize.Y, guestAutoCfg.hitboxSize.Z) end
-        if type(win.Flags.guestHitboxY)=="number" then guestAutoCfg.hitboxSize=Vector3.new(guestAutoCfg.hitboxSize.X, win.Flags.guestHitboxY, guestAutoCfg.hitboxSize.Z) end
-        if type(win.Flags.guestHitboxZ)=="number" then guestAutoCfg.hitboxSize=Vector3.new(guestAutoCfg.hitboxSize.X, guestAutoCfg.hitboxSize.Y, win.Flags.guestHitboxZ) end
-        if type(win.Flags.guestAutoRange)=="number" then guestAutoCfg.detectionRange=win.Flags.guestAutoRange end
-        if type(win.Flags.guestAutoDelay)=="number" then guestAutoCfg.blockDelay=win.Flags.guestAutoDelay end
-        if win.Flags.guestAutoBlockType ~= nil then guestAutoCfg.blockType=win.Flags.guestAutoBlockType end
-        if win.Flags.guestAutoDouble ~= nil then guestAutoCfg.doubleBlock=win.Flags.guestAutoDouble end
-        if win.Flags.guestAutoAntiBait ~= nil then guestAutoCfg.antiBait=win.Flags.guestAutoAntiBait end
+        if win.Flags.guestSoundBlockEnabled ~= nil then 
+            guestCfg.soundBlockEnabled=win.Flags.guestSoundBlockEnabled
+            if guestCfg.soundBlockEnabled then
+                guestCfg.autoBlockOn = true
+                pcall(function()
+                    local kf = getTeamFolder("Killers")
+                    if kf then
+                        for _, killer in pairs(kf:GetChildren()) do
+                            for _, d in pairs(killer:GetDescendants()) do
+                                if d:IsA("Sound") then pcall(g_hookSound, d) end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+        if win.Flags.guestHitboxEnabled ~= nil then guestCfg.hitboxEnabled=win.Flags.guestHitboxEnabled; if guestCfg.hitboxEnabled then setupHitboxBlock() end end
+        if win.Flags.guestAnimEnabled ~= nil then guestCfg.animEnabled=win.Flags.guestAnimEnabled; if guestCfg.animEnabled then setupAnimBlock() end end
+        if type(win.Flags.guestHitboxX)=="number" then guestCfg.hitboxSize=Vector3.new(win.Flags.guestHitboxX, guestCfg.hitboxSize.Y, guestCfg.hitboxSize.Z) end
+        if type(win.Flags.guestHitboxY)=="number" then guestCfg.hitboxSize=Vector3.new(guestCfg.hitboxSize.X, win.Flags.guestHitboxY, guestCfg.hitboxSize.Z) end
+        if type(win.Flags.guestHitboxZ)=="number" then guestCfg.hitboxSize=Vector3.new(guestCfg.hitboxSize.X, guestCfg.hitboxSize.Y, win.Flags.guestHitboxZ) end
+        if type(win.Flags.guestAutoRange)=="number" then guestCfg.detectionRange=win.Flags.guestAutoRange end
+        if type(win.Flags.guestAutoDelay)=="number" then guestCfg.blockDelay=win.Flags.guestAutoDelay end
+        if win.Flags.guestAutoBlockType ~= nil then guestCfg.blockType=win.Flags.guestAutoBlockType end
+        if win.Flags.guestAutoDouble ~= nil then guestCfg.doubleBlock=win.Flags.guestAutoDouble end
         if win.Flags.veeeAutoTrick ~= nil then atEnabled=win.Flags.veeeAutoTrick; if atEnabled then atStartManager() else atStopManager() end end
         if win.Flags.sk8ControlEnabled ~= nil then sk8_controlEnabled=win.Flags.sk8ControlEnabled; if not sk8_controlEnabled and sk8_controlActive then sk8_stopOverride() end end
         if win.Flags.veeeFastSpray ~= nil then vee_fastSpray=win.Flags.veeeFastSpray; if not vee_fastSpray then sprayPhase=0; sprayBaseCF=nil end end
-        if win.Flags.guestPunchEnabled ~= nil then punchCfg.enabled=win.Flags.guestPunchEnabled; if punchCfg.enabled and lp.Character then punchSetupAimPunch(lp.Character) end end
-        if type(win.Flags.guestPunchPred)=="number" then punchCfg.punchPrediction=win.Flags.guestPunchPred end
-        if type(win.Flags.guestPunchDur)=="number" then punchCfg.aimPunchDuration=win.Flags.guestPunchDur end
+        if win.Flags.ttEnabled ~= nil then tt_enabled=win.Flags.ttEnabled end
+        if win.Flags.ttDaggerEnabled ~= nil then tt_daggerEnabled=win.Flags.ttDaggerEnabled end
+        if win.Flags.ttBackstabType ~= nil then tt_backstabType=win.Flags.ttBackstabType end
+        if win.Flags.ttRangeMode ~= nil then tt_rangeMode=win.Flags.ttRangeMode end
         
         print("[betrayalhub] All features restored from config!")
     end)
