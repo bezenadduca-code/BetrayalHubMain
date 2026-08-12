@@ -16,8 +16,8 @@ Library.ShowToggleFrameInKeybinds = true
 
 -- ===== WINDOW WITH WORKING ICON =====
 local Window = Library:CreateWindow({
-	Title = "Sanity + ESP",
-	Footer = "INFINITE SANITY MUAHAHA",
+	Title = "FolkHub",
+	Footer = "Made By Mitsuki - Join the Discord Server MotherFucker",
 	Icon = "rbxassetid://137997269840915",  -- Working icon!
 	NotifySide = "Right",
 	ShowCustomCursor = true,
