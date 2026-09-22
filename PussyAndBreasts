@@ -7,28 +7,41 @@ local function getRelativeCFrame(worldCFrame)
     return REF_CFRAME:ToObjectSpace(worldCFrame)
 end
 
-local function StripClothingOnly(char)
-    for _, child in ipairs(char:GetChildren()) do
-        if child:IsA("Clothing") or child:IsA("ShirtGraphic") then
-            child:Destroy()
-        elseif child:IsA("Model") then
-            local name = child.Name:lower()
-            if name:find("clothing") or name:find("jacket") or name:find("pants") or name:find("shirt") or name:find("sweater") or name:find("dress") then
-                child:Destroy()
+-- Get the player's actual skin color from their character
+local function getSkinColor(char)
+    -- Try body parts first (R15 then R6)
+    local bodyParts = {
+        char:FindFirstChild("UpperTorso"),
+        char:FindFirstChild("LowerTorso"),
+        char:FindFirstChild("Torso"),
+        char:FindFirstChild("LeftUpperArm"),
+        char:FindFirstChild("RightUpperArm"),
+        char:FindFirstChild("Head"),
+    }
+    for _, part in ipairs(bodyParts) do
+        if part and part:IsA("BasePart") then
+            -- BodyColors-based color via BrickColor or Color
+            local bc = char:FindFirstChildOfClass("BodyColors")
+            if bc then
+                local torsoColor = bc.TorsoColor3
+                if torsoColor then
+                    return torsoColor
+                end
             end
+            return part.Color
         end
     end
+    return Color3.fromRGB(234, 184, 146) -- fallback
 end
 
-local function ApplyCompleteBoba()
+local function ApplyBoba()
     local char = player.Character
     if not char then return end
-    
-    StripClothingOnly(char)
     
     local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
     if not torso then return end
     
+    -- Clean up old folder if it exists
     if char:FindFirstChild("CustomBoba") then
         char.CustomBoba:Destroy()
     end
@@ -36,6 +49,8 @@ local function ApplyCompleteBoba()
     local folder = Instance.new("Folder")
     folder.Name = "CustomBoba"
     folder.Parent = char
+    
+    local skinColor = getSkinColor(char)
     
     local originalSize = Vector3.new(2.04, 2.06, 1.06)
     local scaleX = torso.Size.X / originalSize.X
@@ -81,10 +96,10 @@ local function ApplyCompleteBoba()
         weld.Parent = part
     end
     
-    -- === BREASTS ===
-    local leftSkin = createPart("LeftBreast", Vector3.new(1.2598655223846436, 1.2590680122375488, 1.4745838642120361), Color3.fromRGB(234, 184, 146), Enum.MeshType.Sphere, Vector3.new(1, 1, 1))
+    -- === BREASTS (using your skin color) ===
+    local leftSkin = createPart("LeftBreast", Vector3.new(1.2598655223846436, 1.2590680122375488, 1.4745838642120361), skinColor, Enum.MeshType.Sphere, Vector3.new(1, 1, 1))
     local leftNipple = createPart("LeftNipple", Vector3.new(0.25253811478614807, 0.25253820419311523, 0.25253811478614807), Color3.fromRGB(255, 148, 148), Enum.MeshType.Sphere, Vector3.new(0.4946218430995941, 0.4946218430995941, 0.7066025733947754))
-    local rightSkin = createPart("RightBreast", Vector3.new(1.2598655223846436, 1.2590680122375488, 1.4745838642120361), Color3.fromRGB(234, 184, 146), Enum.MeshType.Sphere, Vector3.new(1, 1, 1))
+    local rightSkin = createPart("RightBreast", Vector3.new(1.2598655223846436, 1.2590680122375488, 1.4745838642120361), skinColor, Enum.MeshType.Sphere, Vector3.new(1, 1, 1))
     local rightNipple = createPart("RightNipple", Vector3.new(0.25253811478614807, 0.25253820419311523, 0.25253811478614807), Color3.fromRGB(255, 148, 148), Enum.MeshType.Sphere, Vector3.new(0.4946218430995941, 0.4946218430995941, 0.7066025733947754))
     
     weldPart(leftSkin, leftSkinWorld)
@@ -92,13 +107,17 @@ local function ApplyCompleteBoba()
     weldPart(rightSkin, rightSkinWorld)
     weldPart(rightNipple, rightNippleWorld)
     
-    print("[✓] Boba applied: clothes stripped, V parts removed!")
+    print("[✓] Boba applied with skin color: " .. tostring(skinColor))
 end
 
+-- Apply on every respawn
 player.CharacterAdded:Connect(function(char)
     task.wait(1.5)
-    pcall(function() ApplyCompleteBoba() end)
+    pcall(function() ApplyBoba() end)
 end)
 
-task.wait(2)
-pcall(function() ApplyCompleteBoba() end)
+-- Apply on script run if character already exists
+if player.Character then
+    task.wait(2)
+    pcall(function() ApplyBoba() end)
+end
