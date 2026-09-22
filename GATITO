@@ -205,7 +205,7 @@ local function buildGatito()
     provider.Name = "GetData"
     provider.OnInvoke = function()
         return {
-            AssetID     = "rbxassetid://125731675440367",   -- ✅ new animation ID
+            AssetID     = "rbxassetid://102295492097324",   -- ✅ new animation ID
             SFX         = "rbxassetid://122539243013404",   -- ⚠️ still old sound (may be blocked)
             DisplayName = "Gatito",
             Description = "bro said he’d never meow",
