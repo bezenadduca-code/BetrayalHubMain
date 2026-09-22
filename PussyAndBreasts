@@ -7,31 +7,46 @@ local function getRelativeCFrame(worldCFrame)
     return REF_CFRAME:ToObjectSpace(worldCFrame)
 end
 
--- Get the player's actual skin color from their character
-local function getSkinColor(char)
-    -- Try body parts first (R15 then R6)
-    local bodyParts = {
-        char:FindFirstChild("UpperTorso"),
-        char:FindFirstChild("LowerTorso"),
-        char:FindFirstChild("Torso"),
-        char:FindFirstChild("LeftUpperArm"),
-        char:FindFirstChild("RightUpperArm"),
-        char:FindFirstChild("Head"),
+-- Read skin color from BodyColors (most reliable)
+local function readSkinColor(char)
+    local bc = char:FindFirstChildOfClass("BodyColors")
+    if bc then
+        return bc.TorsoColor3
+    end
+    -- fallback to torso color
+    local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+    if torso then
+        return torso.Color
+    end
+    return Color3.fromRGB(234, 184, 146)
+end
+
+-- Apply the skin color to the whole character so everything matches
+local function applySkinColor(char, color)
+    local bc = char:FindFirstChildOfClass("BodyColors")
+    if bc then
+        bc.HeadColor3 = color
+        bc.TorsoColor3 = color
+        bc.LeftArmColor3 = color
+        bc.RightArmColor3 = color
+        bc.LeftLegColor3 = color
+        bc.RightLegColor3 = color
+    end
+    -- Also set part colors directly (some games don't respect BodyColors)
+    local partNames = {
+        "Head","Torso","UpperTorso","LowerTorso",
+        "Left Arm","Right Arm","Left Leg","Right Leg",
+        "LeftUpperArm","LeftLowerArm","LeftHand",
+        "RightUpperArm","RightLowerArm","RightHand",
+        "LeftUpperLeg","LeftLowerLeg","LeftFoot",
+        "RightUpperLeg","RightLowerLeg","RightFoot",
     }
-    for _, part in ipairs(bodyParts) do
-        if part and part:IsA("BasePart") then
-            -- BodyColors-based color via BrickColor or Color
-            local bc = char:FindFirstChildOfClass("BodyColors")
-            if bc then
-                local torsoColor = bc.TorsoColor3
-                if torsoColor then
-                    return torsoColor
-                end
-            end
-            return part.Color
+    for _, name in ipairs(partNames) do
+        local p = char:FindFirstChild(name)
+        if p and p:IsA("BasePart") then
+            p.Color = color
         end
     end
-    return Color3.fromRGB(234, 184, 146) -- fallback
 end
 
 local function ApplyBoba()
@@ -41,7 +56,13 @@ local function ApplyBoba()
     local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
     if not torso then return end
     
-    -- Clean up old folder if it exists
+    -- Read the skin color FIRST
+    local skinColor = readSkinColor(char)
+    
+    -- Apply the skin color to the whole character
+    applySkinColor(char, skinColor)
+    
+    -- Clean up old folder
     if char:FindFirstChild("CustomBoba") then
         char.CustomBoba:Destroy()
     end
@@ -50,8 +71,7 @@ local function ApplyBoba()
     folder.Name = "CustomBoba"
     folder.Parent = char
     
-    local skinColor = getSkinColor(char)
-    
+    -- Compute scale relative to the reference torso size (R6 default is 2x2x1)
     local originalSize = Vector3.new(2.04, 2.06, 1.06)
     local scaleX = torso.Size.X / originalSize.X
     local scaleY = torso.Size.Y / originalSize.Y
@@ -96,18 +116,21 @@ local function ApplyBoba()
         weld.Parent = part
     end
     
-    -- === BREASTS (using your skin color) ===
+    -- Define pink color for the nipples
+    local pinkColor = Color3.fromRGB(255, 150, 175)
+    
+    -- === BREASTS & NIPPLES ===
     local leftSkin = createPart("LeftBreast", Vector3.new(1.2598655223846436, 1.2590680122375488, 1.4745838642120361), skinColor, Enum.MeshType.Sphere, Vector3.new(1, 1, 1))
-    local leftNipple = createPart("LeftNipple", Vector3.new(0.25253811478614807, 0.25253820419311523, 0.25253811478614807), Color3.fromRGB(255, 148, 148), Enum.MeshType.Sphere, Vector3.new(0.4946218430995941, 0.4946218430995941, 0.7066025733947754))
+    local leftNipple = createPart("LeftNipple", Vector3.new(0.25253811478614807, 0.25253820419311523, 0.25253811478614807), pinkColor, Enum.MeshType.Sphere, Vector3.new(0.4946218430995941, 0.4946218430995941, 0.7066025733947754))
     local rightSkin = createPart("RightBreast", Vector3.new(1.2598655223846436, 1.2590680122375488, 1.4745838642120361), skinColor, Enum.MeshType.Sphere, Vector3.new(1, 1, 1))
-    local rightNipple = createPart("RightNipple", Vector3.new(0.25253811478614807, 0.25253820419311523, 0.25253811478614807), Color3.fromRGB(255, 148, 148), Enum.MeshType.Sphere, Vector3.new(0.4946218430995941, 0.4946218430995941, 0.7066025733947754))
+    local rightNipple = createPart("RightNipple", Vector3.new(0.25253811478614807, 0.25253820419311523, 0.25253811478614807), pinkColor, Enum.MeshType.Sphere, Vector3.new(0.4946218430995941, 0.4946218430995941, 0.7066025733947754))
     
     weldPart(leftSkin, leftSkinWorld)
     weldPart(leftNipple, leftNippleWorld)
     weldPart(rightSkin, rightSkinWorld)
     weldPart(rightNipple, rightNippleWorld)
     
-    print("[✓] Boba applied with skin color: " .. tostring(skinColor))
+    print("[✓] Boba applied with skin color and pink nipples.")
 end
 
 -- Apply on every respawn
