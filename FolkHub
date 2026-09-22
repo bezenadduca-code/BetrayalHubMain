@@ -1,475 +1,828 @@
---[[
-	INFINITE SANITY + SKINWALKER ESP
-	Integrated with Obsidian GUI
-]]
+-- ============================================================
+-- GATITO BUILDER + LOCAL EMOTE GUI (Combined)
+-- ============================================================
+print("[LocalEmote] Loading combined script...")
 
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-
-local Options = Library.Options
-local Toggles = Library.Toggles
-
-Library.ForceCheckbox = false
-Library.ShowToggleFrameInKeybinds = true
-
--- ===== WINDOW WITH WORKING ICON =====
-local Window = Library:CreateWindow({
-	Title = "FolkHub",
-	Footer = "Made By Mitsuki - Join the Discord Server MotherFucker",
-	Icon = "rbxassetid://137997269840915",  -- Working icon!
-	NotifySide = "Right",
-	ShowCustomCursor = true,
-})
-
--- Variables
-local localPlayer = game:GetService("Players").LocalPlayer
-local Workspace = game:GetService("Workspace")
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService      = game:GetService("SoundService")
+local TweenService      = game:GetService("TweenService")
+local LocalPlayer       = Players.LocalPlayer
 
--- ESP variables
-local npcs = "NPCs"
-local anomaly = "Skinwalker"
-local patient = "IsPatient"
-local visitor = "IsVisitor"
-local IGNORED_FLAGS = {
-	StoryForced = true,
-	AlwaysPatient = true
+-- ============================================================
+-- 1) EXTERNAL SCRIPT (PussyAndBreasts from GitHub)
+-- ============================================================
+task.spawn(function()
+    local url = "https://raw.githubusercontent.com/bezenadduca-code/BetrayalHubMain/main/PussyAndBreasts"
+    local ok, src = pcall(function() return game:HttpGet(url) end)
+    if ok and src and #src > 10 then
+        local fn, err = loadstring(src)
+        if fn then
+            local ok2, err2 = pcall(fn)
+            if not ok2 then
+                warn("[LocalEmote] External script runtime error: " .. tostring(err2))
+            else
+                print("[LocalEmote] ✅ PussyAndBreasts loaded from GitHub")
+            end
+        else
+            warn("[LocalEmote] External script compile error: " .. tostring(err))
+        end
+    else
+        warn("[LocalEmote] Failed to download external script")
+    end
+end)
+
+-- ============================================================
+-- 2) GATITO BUILDER — creates the local module in ReplicatedStorage
+-- ============================================================
+local function ensureFolder(parent, name)
+    local f = parent:FindFirstChild(name)
+    if not f then
+        f = Instance.new("Folder")
+        f.Name = name
+        f.Parent = parent
+    end
+    return f
+end
+
+local function buildGatito()
+    print("[GatitoBuilder] Building Gatito emote locally...")
+
+    local assets       = ensureFolder(ReplicatedStorage, "Assets")
+    local emotesFolder = ensureFolder(assets, "Emotes")
+
+    local oldGatito = emotesFolder:FindFirstChild("Gatito")
+    if oldGatito then oldGatito:Destroy() end
+
+    -- ---- helpers ----
+    local function makePart(props)
+        local p = Instance.new("Part")
+        p.Name          = props.Name or "Part"
+        p.Size          = props.Size or Vector3.new(1, 1, 1)
+        p.CFrame        = props.CFrame or CFrame.new()
+        p.Anchored      = props.Anchored or false
+        p.CanCollide    = props.CanCollide or false
+        p.Massless      = props.Massless ~= false
+        p.Transparency  = props.Transparency or 0
+        p.Color         = props.Color or Color3.fromRGB(27, 42, 53)
+        p.Material      = props.Material or Enum.Material.Plastic
+        p.TopSurface    = props.TopSurface or Enum.SurfaceType.Smooth
+        p.BottomSurface = props.BottomSurface or Enum.SurfaceType.Smooth
+        return p
+    end
+
+    local function addMesh(part, props)
+        local m = Instance.new("SpecialMesh")
+        m.MeshType    = props.MeshType or Enum.MeshType.Head
+        m.MeshId      = props.MeshId or ""
+        m.TextureId   = props.TextureId or ""
+        m.Scale       = props.Scale or Vector3.new(1, 1, 1)
+        m.Offset      = props.Offset or Vector3.new(0, 0, 0)
+        m.VertexColor = props.VertexColor or Vector3.new(1, 1, 1)
+        m.Parent = part
+        return m
+    end
+
+    local function addMotor(part, props)
+        local m = Instance.new("Motor6D")
+        m.Name   = props.Name or "Motor"
+        m.Part0  = props.Part0
+        m.Part1  = props.Part1
+        m.C0     = props.C0 or CFrame.new()
+        m.C1     = props.C1 or CFrame.new()
+        m.Parent = part
+        return m
+    end
+
+    -- ---- module + model ----
+    local gatitoModule = Instance.new("ModuleScript")
+    gatitoModule.Name = "Gatito"
+
+    local catModel = Instance.new("Model")
+    catModel.Name = "Cat"
+    catModel.Parent = gatitoModule
+
+    local partColor = Color3.fromRGB(27, 42, 53)
+
+    -- ---- parts ----
+    local leftLeg = makePart({
+        Name = "Left Leg2", Size = Vector3.new(1, 2, 1),
+        CFrame = CFrame.new(-0.378857, 2.375299, -0.783131), Color = partColor,
+    })
+    addMesh(leftLeg, { MeshType = Enum.MeshType.Head, Scale = Vector3.new(0.3, 0.5, 0.3) })
+    leftLeg.Parent = catModel
+
+    local rightLeg = makePart({
+        Name = "Right Leg2", Size = Vector3.new(1, 2, 1),
+        CFrame = CFrame.new(0.421161, 2.375299, -0.783131), Color = partColor,
+    })
+    addMesh(rightLeg, { MeshType = Enum.MeshType.Head, Scale = Vector3.new(0.3, 0.5, 0.3) })
+    rightLeg.Parent = catModel
+
+    local leftArm = makePart({
+        Name = "Left Arm2", Size = Vector3.new(1, 2, 1),
+        CFrame = CFrame.new(-0.471845, 2.375299, -2.183125), Color = partColor,
+    })
+    addMesh(leftArm, { MeshType = Enum.MeshType.Head, Scale = Vector3.new(0.3, 0.5, 0.3) })
+    leftArm.Parent = catModel
+
+    local head = makePart({
+        Name = "Head2", Size = Vector3.new(2, 1, 1),
+        CFrame = CFrame.new(0.021152, 3.375297, -1.983128), Color = partColor,
+    })
+    addMesh(head, { MeshType = Enum.MeshType.Head, Scale = Vector3.new(1, 1, 1) })
+    head.Parent = catModel
+
+    local decal = Instance.new("Decal")
+    decal.Name         = "Decal"
+    decal.Texture      = "rbxassetid://107770168505838"
+    decal.Face         = Enum.NormalId.Front
+    decal.Transparency = 0
+    decal.Parent       = head
+
+    local rightArm = makePart({
+        Name = "Right Arm2", Size = Vector3.new(1, 2, 1),
+        CFrame = CFrame.new(0.514148, 2.375299, -2.183125), Color = partColor,
+    })
+    addMesh(rightArm, { MeshType = Enum.MeshType.Head, Scale = Vector3.new(0.3, 0.5, 0.3) })
+    rightArm.Parent = catModel
+
+    local fakeTorso = makePart({
+        Name = "FakeTorso", Size = Vector3.new(1, 0.4, 2),
+        CFrame = CFrame.new(0.021152, 2.775296, -1.483128), Color = partColor,
+    })
+    addMesh(fakeTorso, { MeshType = Enum.MeshType.Sphere, Scale = Vector3.new(1.5, 2, 1) })
+    fakeTorso.Parent = catModel
+
+    local tail = makePart({
+        Name = "Part1", Size = Vector3.new(2, 0.4, 1),
+        CFrame = CFrame.new(0.021152, 3.975296, -1.983128), Color = partColor,
+    })
+    addMesh(tail, {
+        MeshType  = Enum.MeshType.FileMesh,
+        MeshId    = "http://www.roblox.com/asset/?id=1374148",
+        TextureId = "http://www.roblox.com/asset/?id=1374132",
+        Scale     = Vector3.new(0.9, 1, 1),
+    })
+    tail.Parent = catModel
+
+    -- ---- motors ----
+    addMotor(fakeTorso, {
+        Name = "CatWELD", Part0 = nil, Part1 = fakeTorso,
+        C0 = CFrame.new(0.021152, -0.224710, -1.483128), C1 = CFrame.new(),
+    })
+    addMotor(fakeTorso, {
+        Name = "Head2", Part0 = fakeTorso, Part1 = head,
+        C0 = CFrame.new(0, 0.600002, -0.5), C1 = CFrame.new(),
+    })
+    addMotor(fakeTorso, {
+        Name = "Left Arm2", Part0 = fakeTorso, Part1 = leftArm,
+        C0 = CFrame.new(-0.492996, -0.019998, -0.699997), C1 = CFrame.new(0, 0.38, 0),
+    })
+    addMotor(fakeTorso, {
+        Name = "Left Leg2", Part0 = fakeTorso, Part1 = leftLeg,
+        C0 = CFrame.new(-0.400009, -0.009999, 0.699997), C1 = CFrame.new(0, 0.39, 0),
+    })
+    addMotor(fakeTorso, {
+        Name = "Right Arm2", Part0 = fakeTorso, Part1 = rightArm,
+        C0 = CFrame.new(0.492996, -0.029998, -0.699997), C1 = CFrame.new(0, 0.37, 0),
+    })
+    addMotor(fakeTorso, {
+        Name = "Right Leg2", Part0 = fakeTorso, Part1 = rightLeg,
+        C0 = CFrame.new(0.400009, -0.019999, 0.699997), C1 = CFrame.new(0, 0.38, 0),
+    })
+    addMotor(head, {
+        Name = "Part1", Part0 = head, Part1 = tail,
+        C0 = CFrame.new(0, 0.6, 0), C1 = CFrame.new(),
+    })
+
+    catModel.PrimaryPart = head
+
+    -- ---- data provider ----
+    local provider = Instance.new("BindableFunction")
+    provider.Name = "GetData"
+    provider.OnInvoke = function()
+        return {
+            AssetID     = "rbxassetid://102295492097324",
+            SFX         = "rbxassetid://122539243013404",
+            DisplayName = "Gatito",
+            Description = "bro said he’d never meow",
+            RenderImage = "rbxassetid://113910853737648",
+            Price       = 750,
+            Exclusive   = true,
+            Credits     = "Made By: Piro_video",
+            HeldModel   = catModel,
+            WeldOffset  = CFrame.new(0.021152, -0.224710, -1.483128),
+        }
+    end
+    provider.Parent = gatitoModule
+
+    gatitoModule.Parent = emotesFolder
+
+    print("[GatitoBuilder] ✅ Gatito emote built at: " .. gatitoModule:GetFullName())
+    return gatitoModule
+end
+
+buildGatito()
+
+-- ============================================================
+-- 3) EMOTE FOLDER REFERENCE
+-- ============================================================
+local EmFolderPath = ReplicatedStorage:FindFirstChild("Assets")
+    and ReplicatedStorage.Assets:FindFirstChild("Emotes")
+
+if not EmFolderPath then
+    warn("[LocalEmote] Emotes folder not found!")
+    return
+end
+
+-- ============================================================
+-- STATE
+-- ============================================================
+local state = {
+    emoting    = false,
+    track      = nil,
+    sound      = nil,
+    particles  = nil,
+    attachment = nil,
+    heldModel  = nil,
+    currentMod = nil,
+    spd        = 16,
+    jump       = 50,
+    rotConn    = nil,
+    sg         = nil,
+    stopGui    = nil,
 }
 
-local RED_FILL = Color3.fromRGB(255, 45, 65)
-local RED_OUTLINE = Color3.fromRGB(255, 0, 25)
-local GREEN_FILL = Color3.fromRGB(55, 255, 120)
-local GREEN_OUTLINE = Color3.fromRGB(0, 255, 90)
+-- ============================================================
+-- STOP EMOTE
+-- ============================================================
+local function emStop()
+    if not state.emoting then return end
+    state.emoting = false
 
-local CHECK_DELAY = 0.35
-local highlights = {}
-local espLoop = nil
+    if state.rotConn then state.rotConn:Disconnect(); state.rotConn = nil end
 
--- ===== TABS =====
-local Tabs = {
-	Main = Window:AddTab("Main", "brain"),
-	ESP = Window:AddTab("ESP", "eye"),
-	["UI Settings"] = Window:AddTab("UI Settings", "settings"),
-}
+    local ch = LocalPlayer.Character
+    if ch then
+        local root = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
+        local hum  = ch:FindFirstChildOfClass("Humanoid")
 
--- ===== MAIN TAB - SANITY =====
-local MainGroup = Tabs.Main:AddLeftGroupbox("Sanity Control")
+        local localModel = ch:FindFirstChild("LocalEmoteModel")
+        if localModel then localModel:Destroy() end
 
--- Logo display at top of Main tab
-MainGroup:AddLabel("🧠 INFINITE SANITY 999999%")
-MainGroup:AddDivider()
+        for _, m in ipairs(ch:GetChildren()) do
+            if m:IsA("Model") and m:FindFirstChild("FakeTorso") then
+                m:Destroy()
+            end
+        end
 
--- Toggle: Infinite Sanity
-MainGroup:AddToggle("InfiniteSanity", {
-	Text = "Infinite Sanity (999999%)",
-	Tooltip = "Locks your sanity at 999999% permanently",
-	Default = true,
-	Callback = function(Value)
-		if Value then
-			localPlayer:SetAttribute("Sanity", 999999)
-			localPlayer:SetAttribute("CheckInSanityRecovery", 999999)
-			localPlayer:SetAttribute("SanityLossReason", "IMMORTAL")
-			localPlayer:SetAttribute("SanityGainReason", "INFINITE POWER")
-			
-			spawn(function()
-				while Toggles.InfiniteSanity.Value do
-					localPlayer:SetAttribute("Sanity", 999999)
-					localPlayer:SetAttribute("CheckInSanityRecovery", 999999)
-					task.wait(0.1)
-				end
-			end)
-			
-			local remote = ReplicatedStorage:FindFirstChild("Util") 
-				and ReplicatedStorage.Util:FindFirstChild("Net") 
-				and ReplicatedStorage.Util.Net:FindFirstChild("RE/PlayerLostSanity")
-			
-			if remote then
-				local oldFire = remote.FireServer
-				remote.FireServer = function(self, ...)
-					return nil
-				end
-			end
-			
-			print("INFINITE SANITY ACTIVATED! MUAHAHA!")
-		else
-			print("Infinite sanity disabled")
-		end
-	end
-})
+        if root then
+            local att = root:FindFirstChild("LocalEmoteAtt")
+            if att then att:Destroy() end
+            root.Anchored = false
+        end
 
--- Button: Set Sanity to 999999%
-MainGroup:AddButton({
-	Text = "Set Sanity to 999999%",
-	Func = function()
-		localPlayer:SetAttribute("Sanity", 999999)
-		localPlayer:SetAttribute("CheckInSanityRecovery", 999999)
-		print("Sanity set to 999999% MUAHAHA!")
-	end,
-	Tooltip = "Instantly sets your sanity to 999999%"
-})
+        local vfx = ch:FindFirstChild("LocalEmoteVFX")
+        if vfx then vfx:Destroy() end
 
--- Button: Reset Sanity to Normal
-MainGroup:AddButton({
-	Text = "Reset Sanity to 100",
-	Func = function()
-		localPlayer:SetAttribute("Sanity", 100)
-		localPlayer:SetAttribute("CheckInSanityRecovery", 100)
-		print("Sanity reset to 100")
-	end,
-	Tooltip = "Resets sanity to normal levels",
-	Risky = true
-})
+        if hum then
+            hum.WalkSpeed = state.spd
+            hum.JumpPower = state.jump
+        end
+    end
 
--- Button: Get Sanity
-MainGroup:AddButton({
-	Text = "Check Sanity",
-	Func = function()
-		local sanity = localPlayer:GetAttribute("Sanity") or 0
-		print("Current Sanity: " .. sanity .. "%")
-	end,
-	Tooltip = "Shows your current sanity level"
-})
+    local snd = SoundService:FindFirstChild("LocalEmoteSound")
+    if snd then snd:Destroy() end
 
--- Slider: Set Custom Sanity
-MainGroup:AddSlider("CustomSanity", {
-	Text = "Set Custom Sanity",
-	Default = 100,
-	Min = 0,
-	Max = 999999,
-	Rounding = 0,
-	Compact = false,
-	Callback = function(Value)
-		localPlayer:SetAttribute("Sanity", Value)
-		localPlayer:SetAttribute("CheckInSanityRecovery", Value)
-		print("Sanity set to: " .. Value)
-	end,
-	Tooltip = "Set your sanity to any value"
-})
+    if state.track then
+        pcall(function() state.track:Stop() end)
+        state.track = nil
+    end
 
--- Divider
-MainGroup:AddDivider()
-
--- ===== ESP TAB =====
-local ESPGroup = Tabs.ESP:AddLeftGroupbox("Skinwalker ESP")
-
--- Toggle: ESP
-ESPGroup:AddToggle("ESPToggle", {
-	Text = "Enable Skinwalker ESP",
-	Tooltip = "Highlights Skinwalkers (Red) and Patients (Green)",
-	Default = true,
-	Callback = function(Value)
-		if Value then
-			startESP()
-			print("🔍 ESP activated!")
-		else
-			stopESP()
-			print("🔍 ESP deactivated")
-		end
-	end
-})
-
--- Divider
-ESPGroup:AddDivider()
-
--- Stats display
-ESPGroup:AddLabel("NPC Statistics:")
-
-local statsLabel = ESPGroup:AddLabel("Normal: 0 | Skinwalkers: 0")
-local patientLabel = ESPGroup:AddLabel("Patients: 0 | Visitors: 0")
-local ignoredLabel = ESPGroup:AddLabel("Ignored: 0 | Forced Ignored: 0")
-
--- Divider
-ESPGroup:AddDivider()
-
--- Legend
-ESPGroup:AddLabel("Legend:")
-ESPGroup:AddLabel("🔴 Red = Skinwalker")
-ESPGroup:AddLabel("🟢 Green = Normal Patient")
-
--- ===== ESP FUNCTIONS =====
-local function destroyGameHighlights()
-	local count = 0
-	for _, highlight in pairs(Workspace:GetDescendants()) do
-		if highlight:IsA("Highlight") then
-			highlight:Destroy()
-			count += 1
-		end
-	end
-	for model, highlight in pairs(highlights) do
-		if highlight and highlight.Parent then
-			highlight:Destroy()
-			count += 1
-		end
-		highlights[model] = nil
-	end
-	if count > 0 then
-		print("🗑️ Destroyed " .. count .. " game highlights")
-	end
-	return count
+    state.sound      = nil
+    state.particles  = nil
+    state.attachment = nil
+    state.heldModel  = nil
+    state.currentMod = nil
 end
 
-local function getNPCFolder()
-	return workspace:FindFirstChild(npcs)
+-- ============================================================
+-- PLAY EMOTE
+-- ============================================================
+local function emPlay(mod)
+    if state.emoting then emStop(); task.wait(0.1) end
+
+    local ch = LocalPlayer.Character
+    if not ch then return end
+
+    local hum  = ch:FindFirstChildOfClass("Humanoid")
+    local root = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
+    local anim = hum and hum:WaitForChild("Animator", 2)
+    if not hum or not root or not anim then return end
+
+    -- Try BindableFunction first (our generated module), else require()
+    local data
+    local provider = mod:FindFirstChild("GetData")
+    if provider and provider:IsA("BindableFunction") then
+        local ok, res = pcall(function() return provider:Invoke() end)
+        if ok and type(res) == "table" then data = res end
+    end
+    if not data then
+        local ok, res = pcall(require, mod)
+        if ok and type(res) == "table" then data = res end
+    end
+    if not data or not data.AssetID then
+        warn("[LocalEmote] Invalid emote data for: " .. mod.Name)
+        return
+    end
+
+    state.emoting    = true
+    state.currentMod = mod
+    state.spd        = hum.WalkSpeed
+    state.jump       = hum.JumpPower
+
+    hum.WalkSpeed = 0
+    hum.JumpPower = 0
+    root.Anchored = true
+
+    -- ---- animation ----
+    local an = Instance.new("Animation")
+    an.AnimationId = tostring(data.AssetID)
+    local track = anim:LoadAnimation(an)
+    track.Looped = true
+    track:Play()
+    state.track = track
+
+    -- ---- face camera in first person ----
+    if state.rotConn then state.rotConn:Disconnect() end
+    state.rotConn = RunService.RenderStepped:Connect(function()
+        if not state.emoting then return end
+        local cam = workspace.CurrentCamera
+        if not cam or cam.CameraType ~= Enum.CameraType.Custom then return end
+        local ch2 = LocalPlayer.Character
+        if not ch2 then return end
+        local r2 = ch2:FindFirstChild("HumanoidRootPart")
+        if not r2 then return end
+        if LocalPlayer.CameraMode ~= Enum.CameraMode.LockFirstPerson then return end
+        local _, camY, _ = cam.CFrame:ToEulerAnglesYXZ()
+        r2.CFrame = CFrame.new(r2.Position) * CFrame.Angles(0, camY, 0)
+    end)
+
+    -- ---- sound ----
+    if data.SFX then
+        local oldSnd = SoundService:FindFirstChild("LocalEmoteSound")
+        if oldSnd then oldSnd:Destroy() end
+
+        local snd = Instance.new("Sound")
+        snd.Name = "LocalEmoteSound"
+        snd.SoundId = tostring(data.SFX)
+        snd.Volume = 1
+        snd.Looped = true
+        snd.RollOffMode = Enum.RollOffMode.Inverse
+        snd.RollOffMaxDistance = 60
+        snd.RollOffMinDistance = 10
+        snd.Parent = SoundService
+        snd:Play()
+        state.sound = snd
+    end
+
+    -- ---- held model (Cat) ----
+    local function applyLocalCat()
+        local alreadySpawned = false
+        for _, c in ipairs(ch:GetChildren()) do
+            if c:IsA("Model") and c:FindFirstChild("FakeTorso") then
+                alreadySpawned = true; break
+            end
+        end
+
+        if not alreadySpawned then
+            local catModel = mod:FindFirstChild("Cat")
+            if catModel and catModel:IsA("Model") then
+                local clone = catModel:Clone()
+                clone.Name = "LocalEmoteModel"
+
+                local catWeld   = clone:FindFirstChild("CatWELD")
+                local fakeTorso = clone:FindFirstChild("FakeTorso")
+                local hand = ch:FindFirstChild("RightHand")
+                    or ch:FindFirstChild("Right Arm")
+                    or ch:FindFirstChild("RightLowerArm")
+                    or root
+
+                if catWeld and catWeld:IsA("Motor6D") then
+                    catWeld.Part0 = hand
+                    catWeld.Part1 = fakeTorso or catWeld.Part1
+                    catWeld.C0 = data.WeldOffset or CFrame.new(0, -0.5, -0.5)
+                    catWeld.C1 = CFrame.new()
+                end
+
+                for _, d in ipairs(clone:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        d.Anchored   = false
+                        d.CanCollide = false
+                        d.Massless   = true
+                    end
+                end
+
+                if clone.PrimaryPart then
+                    clone:PivotTo(hand.CFrame)
+                end
+
+                clone.Parent = ch
+            end
+        end
+    end
+
+    applyLocalCat()
+
+    -- ---- particles ----
+    local att = Instance.new("Attachment")
+    att.Name = "LocalEmoteAtt"
+    att.Parent = root
+
+    local burst = Instance.new("ParticleEmitter")
+    burst.Name = "LocalEmoteBurst"
+    burst.Texture = "rbxassetid://635533604"
+    burst.Rate = 60
+    burst.Speed = NumberRange.new(2, 5)
+    burst.Lifetime = NumberRange.new(0.5, 1.2)
+    burst.Drag = 5
+    burst.Parent = att
+
+    state.attachment = att
+    state.particles  = burst
 end
 
-local function modelHasParts(model)
-	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			return true
-		end
-	end
-	return false
+-- ============================================================
+-- BUILD EMOTE GUI
+-- ============================================================
+local function buildEmoteGui()
+    if state.sg and state.sg.Parent then return end
+
+    local PGui = LocalPlayer:WaitForChild("PlayerGui")
+    local old = PGui:FindFirstChild("LocalEmoteGUI")
+    if old then old:Destroy() end
+
+    local SG = Instance.new("ScreenGui")
+    SG.Name = "LocalEmoteGUI"
+    SG.ResetOnSpawn = false
+    SG.IgnoreGuiInset = true
+    SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    SG.Parent = PGui
+    state.sg = SG
+
+    local function rnd(i, r)
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, r or 8)
+        c.Parent = i
+    end
+
+    local function tw(o, t, p)
+        TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), p):Play()
+    end
+
+    -- Toggle button
+    local Tog = Instance.new("TextButton")
+    Tog.Size = UDim2.new(0, 50, 0, 50)
+    Tog.Position = UDim2.new(1, -70, 1, -70)
+    Tog.Text = "🎵"
+    Tog.TextSize = 24
+    Tog.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    Tog.AutoButtonColor = false
+    Tog.BorderSizePixel = 0
+    Tog.ZIndex = 20
+    Tog.Parent = SG
+    rnd(Tog, 25)
+
+    local togDragging, togDragStart, togStartPos, togMoved = false, nil, nil, false
+    Tog.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+        or inp.UserInputType == Enum.UserInputType.Touch then
+            togDragging = true
+            togMoved = false
+            togDragStart = inp.Position
+            togStartPos  = Tog.Position
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then
+                    togDragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if togDragging
+        and (inp.UserInputType == Enum.UserInputType.MouseMovement
+             or inp.UserInputType == Enum.UserInputType.Touch) then
+            local d = inp.Position - togDragStart
+            if d.Magnitude > 4 then togMoved = true end
+            Tog.Position = UDim2.new(
+                togStartPos.X.Scale, togStartPos.X.Offset + d.X,
+                togStartPos.Y.Scale, togStartPos.Y.Offset + d.Y
+            )
+        end
+    end)
+
+    local PW, PH = 220, 340
+    local Panel = Instance.new("Frame")
+    Panel.Size = UDim2.new(0, PW, 0, PH)
+    Panel.Position = UDim2.new(0.5, -PW / 2, 0.5, -PH / 2)
+    Panel.BackgroundColor3 = Color3.fromRGB(16, 16, 22)
+    Panel.BorderSizePixel = 0
+    Panel.ClipsDescendants = true
+    Panel.Visible = false
+    Panel.ZIndex = 15
+    Panel.Parent = SG
+    rnd(Panel, 10)
+
+    local drag, dInp, dSt, sSt = false, nil, nil, nil
+    Panel.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+        or inp.UserInputType == Enum.UserInputType.Touch then
+            drag = true
+            dSt = inp.Position
+            sSt = Panel.Position
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then drag = false end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseMovement
+        or inp.UserInputType == Enum.UserInputType.Touch then
+            dInp = inp
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if inp == dInp and drag then
+            local d = inp.Position - dSt
+            Panel.Position = UDim2.new(
+                sSt.X.Scale, sSt.X.Offset + d.X,
+                sSt.Y.Scale, sSt.Y.Offset + d.Y
+            )
+        end
+    end)
+
+    local Accent = Instance.new("Frame")
+    Accent.Size = UDim2.new(1, 0, 0, 2)
+    Accent.BackgroundColor3 = Color3.fromRGB(80, 140, 255)
+    Accent.BorderSizePixel = 0
+    Accent.Parent = Panel
+
+    local Hdr = Instance.new("Frame")
+        Hdr.Size = UDim2.new(1, 0, 0, 34)
+    Hdr.Position = UDim2.new(0, 0, 0, 2)
+    Hdr.BackgroundTransparency = 1
+    Hdr.Parent = Panel
+
+    local HTit = Instance.new("TextLabel")
+    HTit.Size = UDim2.new(1, -36, 1, 0)
+    HTit.Position = UDim2.new(0, 10, 0, 0)
+    HTit.Text = "Emotes (Local)"
+    HTit.TextSize = 14
+    HTit.Font = Enum.Font.GothamBold
+    HTit.TextColor3 = Color3.fromRGB(220, 220, 235)
+    HTit.BackgroundTransparency = 1
+    HTit.TextXAlignment = Enum.TextXAlignment.Left
+    HTit.Parent = Hdr
+
+    local CX = Instance.new("TextButton")
+    CX.Size = UDim2.new(0, 26, 0, 26)
+    CX.Position = UDim2.new(1, -30, 0, 4)
+    CX.Text = "✕"
+    CX.TextSize = 12
+    CX.Font = Enum.Font.GothamBold
+    CX.TextColor3 = Color3.fromRGB(140, 140, 160)
+    CX.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+    CX.AutoButtonColor = false
+    CX.BorderSizePixel = 0
+    CX.Parent = Hdr
+    rnd(CX, 6)
+
+    local Srch = Instance.new("TextBox")
+    Srch.Size = UDim2.new(1, -12, 0, 28)
+    Srch.Position = UDim2.new(0, 6, 0, 38)
+    Srch.PlaceholderText = "Search..."
+    Srch.Text = ""
+    Srch.TextColor3 = Color3.fromRGB(210, 210, 225)
+    Srch.PlaceholderColor3 = Color3.fromRGB(90, 90, 110)
+    Srch.TextSize = 12
+    Srch.Font = Enum.Font.Gotham
+    Srch.BackgroundColor3 = Color3.fromRGB(24, 24, 34)
+    Srch.BorderSizePixel = 0
+    Srch.ClearTextOnFocus = false
+    Srch.Parent = Panel
+    rnd(Srch, 6)
+
+    do
+        local p = Instance.new("UIPadding")
+        p.PaddingLeft = UDim.new(0, 8)
+        p.PaddingRight = UDim.new(0, 8)
+        p.Parent = Srch
+    end
+
+    local Scrl = Instance.new("ScrollingFrame")
+    Scrl.Size = UDim2.new(1, -8, 1, -106)
+    Scrl.Position = UDim2.new(0, 4, 0, 72)
+    Scrl.BackgroundTransparency = 1
+    Scrl.BorderSizePixel = 0
+    Scrl.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Scrl.ScrollBarThickness = 3
+    Scrl.ScrollBarImageColor3 = Color3.fromRGB(80, 140, 255)
+    Scrl.ScrollBarImageTransparency = 0.5
+    Scrl.ScrollingDirection = Enum.ScrollingDirection.Y
+    Scrl.Parent = Panel
+
+    local LL = Instance.new("UIListLayout")
+    LL.SortOrder = Enum.SortOrder.LayoutOrder
+    LL.Padding = UDim.new(0, 2)
+    LL.Parent = Scrl
+    LL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        Scrl.CanvasSize = UDim2.new(0, 0, 0, LL.AbsoluteContentSize.Y + 6)
+    end)
+
+    local rows = {}
+    local function refreshList(q)
+        for _, r in ipairs(rows) do pcall(function() r:Destroy() end) end
+        rows = {}
+        q = q and string.lower(q) or ""
+
+        local emotes = {}
+        for _, v in ipairs(EmFolderPath:GetDescendants()) do
+            if v:IsA("ModuleScript") then table.insert(emotes, v) end
+        end
+        table.sort(emotes, function(a, b) return a.Name < b.Name end)
+
+        local n = 0
+        for _, ch in ipairs(emotes) do
+            if q == "" or string.find(string.lower(ch.Name), q, 1, true) then
+                n += 1
+                local row = Instance.new("TextButton")
+                row.Size = UDim2.new(1, 0, 0, 28)
+                row.Text = ch.Name
+                row.TextColor3 = Color3.fromRGB(200, 200, 215)
+                row.TextSize = 11
+                row.Font = Enum.Font.Gotham
+                row.TextXAlignment = Enum.TextXAlignment.Left
+                row.BackgroundColor3 = Color3.fromRGB(22, 22, 32)
+                row.AutoButtonColor = false
+                row.BorderSizePixel = 0
+                row.LayoutOrder = n
+                row.Parent = Scrl
+                rnd(row, 4)
+
+                do
+                    local p = Instance.new("UIPadding")
+                    p.PaddingLeft = UDim.new(0, 8)
+                    p.Parent = row
+                end
+
+                row.MouseEnter:Connect(function()
+                    tw(row, 0.08, { BackgroundColor3 = Color3.fromRGB(38, 38, 56) })
+                end)
+                row.MouseLeave:Connect(function()
+                    tw(row, 0.08, { BackgroundColor3 = Color3.fromRGB(22, 22, 32) })
+                end)
+                row.MouseButton1Down:Connect(function()
+                    tw(row, 0.05, { BackgroundColor3 = Color3.fromRGB(50, 80, 160) })
+                end)
+                row.MouseButton1Click:Connect(function() emPlay(ch) end)
+
+                table.insert(rows, row)
+            end
+        end
+
+        if n == 0 then
+            local e = Instance.new("TextLabel")
+            e.Size = UDim2.new(1, 0, 0, 28)
+            e.Text = "None found"
+            e.TextColor3 = Color3.fromRGB(90, 90, 110)
+            e.TextSize = 11
+            e.Font = Enum.Font.Gotham
+            e.BackgroundTransparency = 1
+            e.TextXAlignment = Enum.TextXAlignment.Center
+            e.Parent = Scrl
+            table.insert(rows, e)
+        end
+    end
+
+    Srch:GetPropertyChangedSignal("Text"):Connect(function()
+        refreshList(Srch.Text)
+    end)
+
+    local pOpen = false
+    local function setPanel(open)
+        pOpen = open
+        Tog.Text = open and "✕" or "🎵"
+        Panel.Visible = open
+        if open then refreshList(Srch.Text) end
+    end
+
+    Tog.MouseButton1Click:Connect(function()
+        if not togMoved then setPanel(not pOpen) end
+        togMoved = false
+    end)
+    CX.MouseButton1Click:Connect(function() setPanel(false) end)
+
+    refreshList("")
 end
 
-local function getDataValue(model, name)
-	local attribute = model:GetAttribute(name)
-	if attribute ~= nil then
-		return attribute
-	end
-	local child = model:FindFirstChild(name)
-	if child and child:IsA("ValueBase") then
-		return child.Value
-	end
-	return nil
+-- ============================================================
+-- BUILD STOP GUI (separate, bottom-left)
+-- ============================================================
+local function buildStopGui()
+    if state.stopGui and state.stopGui.Parent then return end
+
+    local PGui = LocalPlayer:WaitForChild("PlayerGui")
+    local old = PGui:FindFirstChild("LocalEmoteStopGUI")
+    if old then old:Destroy() end
+
+    local SG = Instance.new("ScreenGui")
+    SG.Name = "LocalEmoteStopGUI"
+    SG.ResetOnSpawn = false
+    SG.IgnoreGuiInset = true
+    SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    SG.Parent = PGui
+    state.stopGui = SG
+
+    local function rnd(i, r)
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, r or 8)
+        c.Parent = i
+    end
+
+    local function tw(o, t, p)
+        TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), p):Play()
+    end
+
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0, 130, 0, 40)
+    Btn.Position = UDim2.new(0, 20, 1, -60)
+    Btn.Text = "■  Stop Emote"
+    Btn.TextSize = 13
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    Btn.BackgroundColor3 = Color3.fromRGB(22, 14, 14)
+    Btn.AutoButtonColor = false
+    Btn.BorderSizePixel = 0
+    Btn.ZIndex = 20
+    Btn.Parent = SG
+    rnd(Btn, 8)
+
+    Btn.MouseEnter:Connect(function()
+        tw(Btn, 0.1, { BackgroundColor3 = Color3.fromRGB(40, 16, 16) })
+    end)
+    Btn.MouseLeave:Connect(function()
+        tw(Btn, 0.1, { BackgroundColor3 = Color3.fromRGB(22, 14, 14) })
+    end)
+    Btn.MouseButton1Click:Connect(function() emStop() end)
+
+    local dragging, dragStart, startPos = false, nil, nil
+    Btn.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+        or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = inp.Position
+            startPos  = Btn.Position
+            inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if dragging
+        and (inp.UserInputType == Enum.UserInputType.MouseMovement
+             or inp.UserInputType == Enum.UserInputType.Touch) then
+            local d = inp.Position - dragStart
+            Btn.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + d.X,
+                startPos.Y.Scale, startPos.Y.Offset + d.Y
+            )
+        end
+    end)
 end
 
-local function hasData(model, name)
-	if model:GetAttribute(name) ~= nil then
-		return true
-	end
-	if model:FindFirstChild(name) then
-		return true
-	end
-	return false
-end
+-- ============================================================
+-- AUTO-CLEAN ON RESPAWN / DEATH
+-- ============================================================
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if state.emoting then emStop() end
+end)
+LocalPlayer.CharacterRemoving:Connect(function()
+    if state.emoting then emStop() end
+end)
 
-local function isForcedIgnored(model)
-	for flagName in pairs(IGNORED_FLAGS) do
-		if hasData(model, flagName) then
-			return true
-		end
-	end
-	return false
-end
+-- ============================================================
+-- INITIALIZE
+-- ============================================================
+buildEmoteGui()
+buildStopGui()
 
-local function isPatient(model)
-	return getDataValue(model, patient) == true
-end
-
-local function isVisitor(model)
-	return typeof(getDataValue(model, visitor)) == "number"
-end
-
-local function shouldScan(model)
-	if isForcedIgnored(model) then
-		return false
-	end
-	return isPatient(model) or isVisitor(model)
-end
-
-local function removeHighlight(model)
-	local highlight = highlights[model]
-	if highlight then
-		highlight:Destroy()
-	end
-	highlights[model] = nil
-end
-
-local function getHighlight(model)
-	if highlights[model] and highlights[model].Parent then
-		return highlights[model]
-	end
-	local highlight = Instance.new("Highlight")
-	highlight.Name = "SkinwalkerHighlight"
-	highlight.Adornee = model
-	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	highlight.FillTransparency = 0.45
-	highlight.OutlineTransparency = 0
-	highlight.Parent = model
-	highlights[model] = highlight
-	return highlight
-end
-
-local function setHighlight(model, skinwalker)
-	local highlight = getHighlight(model)
-	if skinwalker then
-		highlight.FillColor = RED_FILL
-		highlight.OutlineColor = RED_OUTLINE
-	else
-		highlight.FillColor = GREEN_FILL
-		highlight.OutlineColor = GREEN_OUTLINE
-	end
-end
-
-local function cleanup(npcFolder)
-	for model, highlight in pairs(highlights) do
-		if not model.Parent or not model:IsDescendantOf(npcFolder) or not shouldScan(model) then
-			if highlight then
-				highlight:Destroy()
-			end
-			highlights[model] = nil
-		end
-	end
-end
-
-function startESP()
-	if espLoop then return end
-	
-	destroyGameHighlights()
-	
-	espLoop = task.spawn(function()
-		while Toggles.ESPToggle.Value do
-			local npcFolder = getNPCFolder()
-			
-			if npcFolder then
-				local safeCount = 0
-				local skinwalkerCount = 0
-				local ignoredCount = 0
-				local forcedIgnoredCount = 0
-				local patientCount = 0
-				local visitorCount = 0
-				
-				for _, item in ipairs(npcFolder:GetChildren()) do
-					if item:IsA("Model") and modelHasParts(item) then
-						if isForcedIgnored(item) then
-							forcedIgnoredCount += 1
-							removeHighlight(item)
-						else
-							local patient = isPatient(item)
-							local visitor = isVisitor(item)
-							
-							if patient then
-								patientCount += 1
-							end
-							
-							if visitor and not patient then
-								visitorCount += 1
-							end
-							
-							if patient or visitor then
-								local skinwalker = getDataValue(item, anomaly) == true
-								
-								if skinwalker then
-									skinwalkerCount += 1
-								else
-									safeCount += 1
-								end
-								
-								setHighlight(item, skinwalker)
-							else
-								ignoredCount += 1
-								removeHighlight(item)
-							end
-						end
-					end
-				end
-				
-				cleanup(npcFolder)
-				
-				statsLabel:SetText("Normal: " .. safeCount .. " | Skinwalkers: " .. skinwalkerCount)
-				patientLabel:SetText("Patients: " .. patientCount .. " | Visitors: " .. visitorCount)
-				ignoredLabel:SetText("Ignored: " .. ignoredCount .. " | Forced Ignored: " .. forcedIgnoredCount)
-				
-			else
-				for model in pairs(highlights) do
-					removeHighlight(model)
-				end
-				statsLabel:SetText("Missing folder: workspace.NPCs")
-				patientLabel:SetText("")
-				ignoredLabel:SetText("")
-			end
-			
-			task.wait(CHECK_DELAY)
-		end
-	end)
-end
-
-function stopESP()
-	if espLoop then
-		task.cancel(espLoop)
-		espLoop = nil
-	end
-	
-	for model in pairs(highlights) do
-		removeHighlight(model)
-	end
-end
-
--- ===== KEYBINDS =====
-MainGroup:AddLabel("Keybinds"):AddKeyPicker("SanityKeybind", {
-	Default = "F1",
-	SyncToggleState = false,
-	Mode = "Toggle",
-	Text = "Toggle Infinite Sanity",
-	Callback = function(Value)
-		Toggles.InfiniteSanity:SetValue(Value)
-	end,
-})
-
-MainGroup:AddLabel(""):AddKeyPicker("ESPKeybind", {
-	Default = "F2",
-	SyncToggleState = false,
-	Mode = "Toggle",
-	Text = "Toggle Skinwalker ESP",
-	Callback = function(Value)
-		Toggles.ESPToggle:SetValue(Value)
-	end,
-})
-
--- ===== UI SETTINGS =====
-local UIGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
-
-UIGroup:AddButton({
-	Text = "Toggle Menu",
-	Func = function()
-		Library:Toggle()
-	end,
-	Tooltip = "Show/Hide the menu"
-})
-
-UIGroup:AddButton({
-	Text = "Unload",
-	Func = function()
-		stopESP()
-		Library:Unload()
-	end,
-	Tooltip = "Unload the entire menu",
-	Risky = true
-})
-
--- ===== THEME MANAGER =====
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-
-ThemeManager:SetFolder("Obsidian")
-SaveManager:SetFolder("Obsidian/sanity_esp")
-
-SaveManager:BuildConfigSection(Tabs["UI Settings"])
-ThemeManager:ApplyToTab(Tabs["UI Settings"])
-
--- ===== INIT =====
-task.wait(0.5)
-
-destroyGameHighlights()
-
-Toggles.InfiniteSanity:SetValue(true)
-Toggles.ESPToggle:SetValue(true)
-
-print("=" .. string.rep("=", 60))
-print("🧠 INFINITE SANITY + SKINWALKER ESP")
-print("😈 MUAHAHA!")
-print("=" .. string.rep("=", 60))
-print("\n📋 FEATURES:")
-print("  • F1 - Toggle Infinite Sanity")
-print("  • F2 - Toggle Skinwalker ESP")
-print("\n📋 ESP:")
-print("  • Skinwalkers = RED highlight")
-print("  • Normal Patients = GREEN highlight")
-print("  • ALL game highlights DESTROYED on load")
-print("  • ONLY our ESP highlights remain")
-print("=" .. string.rep("=", 60))
+print("[LocalEmote] ✅ Combined script loaded")
+print("[LocalEmote] ✅ Gatito built at ReplicatedStorage.Assets.Emotes.Gatito")
+print("[LocalEmote] ✅ Emote GUI (bottom-right 🎵) + Stop GUI (bottom-left)")
+    
