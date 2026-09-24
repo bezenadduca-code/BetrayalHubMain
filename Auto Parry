@@ -1,0 +1,1195 @@
+--[[
+================================================================
+      BetrayalHub - AutoParry + Full Suite (v6) — PART 1/3
+================================================================
+- Header, services, KILLER_M1 table
+- CONFIG + state
+- Run Speed
+- Infinite Stamina
+- ESP engine
+================================================================
+]]
+print("[AutoParry] Loading Part 1/3...")
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Players    = game:GetService("Players")
+local RS         = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local LP         = Players.LocalPlayer
+local WS         = game:GetService("Workspace")
+
+-- ============================================================
+-- KILLER M1 / DAMAGE ANIM IDS
+-- ============================================================
+local KILLER_M1 = {
+    ["117844841090911"] = "Noli",
+    ["132758498405383"] = "Artful",
+    ["89203130980671"]  = "Artful",
+    ["87898195475239"]  = "Artful",
+    ["138250716705289"] = "Artful",
+    ["87146438233472"]  = "Artful",
+    ["113582430072428"] = "Artful",
+    ["129800540175108"] = "MX",
+    ["129261017602156"] = "MX",
+    ["75264434320824"]  = "Springtrap",
+    ["82772241499573"]  = "Springtrap",
+    ["123780556592973"] = "Uncle",
+    ["121959762417426"] = "Uncle",
+    ["127630414223912"] = "Pringletrap",
+    ["131653968615595"] = "Pringletrap",
+    ["138428301433870"] = "Pringletrap",
+    ["111061946141786"] = "Pringletrap",
+    ["83679738005966"]  = "Pringletrap",
+    ["73562475299697"]  = "Pringletrap",
+    ["75721492835584"]  = "Pringletrap",
+    ["101880862296684"] = "Pringletrap",
+    ["85115788308167"]  = "Pringletrap",
+    ["95546715049911"]  = "Pringletrap",
+    ["104152328735132"] = "Pringletrap",
+    ["107661004673980"] = "1x1x1x1",
+    ["140707537628999"] = "2011x",
+    ["82078180991553"]  = "Angel",
+    ["114255777644148"] = "Artful",
+    ["118646656109044"] = "Azure",
+    ["134141022565347"] = "Chain",
+    ["124866124221985"] = "DrakoBloxxer",
+    ["72635362735002"]  = "Flowers",
+    ["93983441970236"]  = "Harken",
+    ["96983627376703"]  = "Inkfell",
+    ["98210519759118"]  = "Jason",
+    ["136421017561633"] = "JohnDoe",
+    ["95148596797887"]  = "Killstreak",
+    ["102339235328591"] = "MX",
+    ["138108610566731"] = "Noli",
+    ["109835033591766"] = "Nosferatu",
+    ["89122550165871"]  = "Pringletrap",
+    ["94750789684434"]  = "Rake",
+    ["125868697129139"] = "Sixer",
+    ["86990506550112"]  = "Springtrap",
+    ["126371682582154"] = "SuperSonic",
+    ["110148495159767"] = "Uncle",
+    ["140165788037991"] = "c00lkidd",
+}
+
+-- ============================================================
+-- CONFIG + STATE
+-- ============================================================
+local CONFIG = {
+    detectionRange   = 30,
+    parryCooldown    = 0.15,
+    showRange        = true,
+    debug            = true,
+    colorIn          = Color3.fromRGB(0, 255, 100),
+    colorOut         = Color3.fromRGB(255, 50, 50),
+
+    antiBait         = true,
+    antiBaitLength   = 25,
+    antiBaitWidth    = 5,
+    antiBaitForgive  = 2,
+    antiBaitShowLine = true,
+}
+
+local state = {
+    enabled       = false,
+    lastParryTime = 0,
+    animatorConns = {},
+    killerConns   = {},
+    rangeParts    = {},
+    rangeThread   = nil,
+}
+
+-- ============================================================
+-- RUN SPEED
+-- ============================================================
+local runSpeed = { enabled = false, speed = 30, lastValue = 0, thread = nil }
+local _sprintMod, _sprintOrigInit
+
+local function getSprintModule()
+    if _sprintMod then return _sprintMod end
+    local ok, m = pcall(function() return require(RS.Systems.Character.Game.Sprinting) end)
+    if ok and m then _sprintMod = m; _sprintOrigInit = m.Init end
+    return ok and m or nil
+end
+
+local function applyRunSpeed()
+    pcall(function()
+        if not runSpeed.enabled then return end
+        local m = getSprintModule(); if not m then return end
+        if not m.DefaultsSet then pcall(function() m.Init() end) end
+        if runSpeed.speed ~= runSpeed.lastValue then
+            m.SprintSpeed = runSpeed.speed
+            pcall(function() m.MaxSprintSpeed = runSpeed.speed end)
+            runSpeed.lastValue = runSpeed.speed
+        end
+    end)
+end
+
+local function startRunSpeed()
+    if runSpeed.thread then return end
+    runSpeed.thread = task.spawn(function()
+        while runSpeed.enabled do
+            pcall(function()
+                if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then applyRunSpeed() end
+            end)
+            task.wait(0.2)
+        end
+        runSpeed.thread = nil
+    end)
+end
+
+local function stopRunSpeed()
+    runSpeed.enabled = false
+    if runSpeed.thread then task.cancel(runSpeed.thread); runSpeed.thread = nil end
+    pcall(function()
+        local m = getSprintModule()
+        if m then m.SprintSpeed = 26; pcall(function() m.MaxSprintSpeed = 26 end) end
+    end)
+end
+
+-- ============================================================
+-- INFINITE STAMINA
+-- ============================================================
+local infStam = { enabled = false, thread = nil, origInit = nil, mod = nil }
+
+local function getStamModule()
+    if infStam.mod then return infStam.mod end
+    local ok, m = pcall(function() return require(RS.Systems.Character.Game.Sprinting) end)
+    if ok and m then infStam.mod = m; infStam.origInit = m.Init end
+    return ok and m or nil
+end
+
+local function patchStamInit(m)
+    if not m or not infStam.origInit then return end
+    m.Init = function(...)
+        local res = infStam.origInit(...)
+        m.StaminaLossDisabled = true
+        return res
+    end
+end
+
+local function unpatchStamInit(m)
+    if not m or not infStam.origInit then return end
+    m.Init = infStam.origInit
+end
+
+local function applyInfStam()
+    pcall(function()
+        if not infStam.enabled then return end
+        local m = getStamModule(); if not m then return end
+        if not m.DefaultsSet then pcall(function() m.Init() end) end
+        m.StaminaLossDisabled = true
+        patchStamInit(m)
+        pcall(function() if m.Stamina then m.Stamina = m.MaxStamina or 100 end end)
+    end)
+end
+
+local function startInfStam()
+    if infStam.thread then return end
+    infStam.thread = task.spawn(function()
+        while infStam.enabled do
+            pcall(function()
+                if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then applyInfStam() end
+            end)
+            task.wait(0.5)
+        end
+        infStam.thread = nil
+    end)
+end
+
+local function stopInfStam()
+    infStam.enabled = false
+    if infStam.thread then task.cancel(infStam.thread); infStam.thread = nil end
+    pcall(function()
+        local m = getStamModule()
+        if m then m.StaminaLossDisabled = false; unpatchStamInit(m) end
+    end)
+end
+
+-- ============================================================
+-- ESP (LIVE-UPDATE)
+-- ============================================================
+local esp = {
+    enabled = false,
+    showKillers = true,
+    showSurvivors = true,
+    showGenerators = true,
+    maxDistance = 300,
+    transparency = 0.5,
+    thread = nil,
+    tracked = {},
+    childConns = {},
+}
+
+local COLORS = {
+    Killer = Color3.fromRGB(255, 50, 50),
+    Survivor = Color3.fromRGB(50, 255, 50),
+    Generator = Color3.fromRGB(255, 200, 50),
+}
+
+local function espClear()
+    for obj, data in pairs(esp.tracked) do
+        pcall(function() if data.highlight then data.highlight:Destroy() end end)
+        pcall(function() if data.billboard then data.billboard:Destroy() end end)
+    end
+    esp.tracked = {}
+    for _, c in ipairs(esp.childConns) do pcall(function() c:Disconnect() end) end
+    esp.childConns = {}
+end
+
+local function espClearCategory(category)
+    for obj, data in pairs(esp.tracked) do
+        if data.category == category then
+            pcall(function() if data.highlight then data.highlight:Destroy() end end)
+            pcall(function() if data.billboard then data.billboard:Destroy() end end)
+            esp.tracked[obj] = nil
+        end
+    end
+end
+
+local function espGetTeamFolder(name)
+    local root = WS:FindFirstChild("Players")
+    return root and root:FindFirstChild(name)
+end
+
+local function espGetMapContent()
+    local m = WS:FindFirstChild("Map")
+    local ig = m and m:FindFirstChild("Ingame")
+    return ig and ig:FindFirstChild("Map")
+end
+
+local function espAdd(obj, color, labelText, category)
+    if not obj or not obj.Parent or esp.tracked[obj] then return end
+    local attach = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso") or obj:FindFirstChildWhichIsA("BasePart")
+    if not attach then return end
+
+    local hl = Instance.new("Highlight")
+    hl.Name = "BetrayalESP_HL"
+    hl.FillColor = color
+    hl.FillTransparency = esp.transparency
+    hl.OutlineColor = color
+    hl.OutlineTransparency = 0.1
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Adornee = obj
+    hl.Parent = obj
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "BetrayalESP_BB"
+    bb.Adornee = attach
+    bb.Size = UDim2.new(0, 140, 0, 20)
+    bb.StudsOffset = Vector3.new(0, 4, 0)
+    bb.AlwaysOnTop = true
+    bb.MaxDistance = esp.maxDistance
+    bb.Parent = obj
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText or obj.Name
+    label.TextColor3 = color
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.TextStrokeTransparency = 0.3
+    label.TextSize = 10
+    label.Font = Enum.Font.GothamBold
+    label.Parent = bb
+
+    esp.tracked[obj] = {
+        highlight = hl,
+        billboard = bb,
+        label = label,
+        baseName = labelText or obj.Name,
+        category = category or "misc",
+        color = color,
+    }
+
+    table.insert(esp.childConns, obj.AncestryChanged:Connect(function(_, parent)
+        if not parent and esp.tracked[obj] then
+            local d = esp.tracked[obj]
+            pcall(function() d.highlight:Destroy() end)
+            pcall(function() d.billboard:Destroy() end)
+            esp.tracked[obj] = nil
+        end
+    end))
+end
+
+local function espScanTeams()
+    local myChar = LP.Character
+
+    if esp.showKillers then
+        local kf = espGetTeamFolder("Killers")
+        if kf then
+            for _, m in ipairs(kf:GetChildren()) do
+                if m:IsA("Model") and m ~= myChar then
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    if h and h.Health > 0 then espAdd(m, COLORS.Killer, m.Name, "killer") end
+                end
+            end
+        end
+    end
+
+    if esp.showSurvivors then
+        local sf = espGetTeamFolder("Survivors")
+        if sf then
+            for _, m in ipairs(sf:GetChildren()) do
+                if m:IsA("Model") and m ~= myChar then
+                    local h = m:FindFirstChildOfClass("Humanoid")
+                    if h and h.Health > 0 then espAdd(m, COLORS.Survivor, m.Name, "survivor") end
+                end
+            end
+        end
+    end
+
+    if esp.showGenerators then
+        local mc = espGetMapContent()
+        if mc then
+            for _, o in ipairs(mc:GetChildren()) do
+                if o.Name == "Generator" and o.Parent then
+                    espAdd(o, COLORS.Generator, "Generator", "generator")
+                end
+            end
+        end
+    end
+end
+
+local function espRefreshAll()
+    for obj, data in pairs(esp.tracked) do
+        if obj.Parent then
+            if data.highlight then data.highlight.FillTransparency = esp.transparency end
+            if data.billboard then data.billboard.MaxDistance = esp.maxDistance end
+        end
+    end
+    if not esp.showKillers    then espClearCategory("killer")    end
+    if not esp.showSurvivors  then espClearCategory("survivor")  end
+    if not esp.showGenerators then espClearCategory("generator") end
+    pcall(espScanTeams)
+end
+
+local function espStart()
+    esp.enabled = true
+    if esp.thread then task.cancel(esp.thread) end
+    esp.thread = task.spawn(function()
+        while esp.enabled do
+            pcall(espScanTeams)
+            local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if myHRP then
+                for obj, data in pairs(esp.tracked) do
+                    if obj and obj.Parent and data.label then
+                        local a = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+                        if a then
+                            local dist = (a.Position - myHRP.Position).Magnitude
+                            if data.highlight then data.highlight.Enabled = dist <= esp.maxDistance end
+                            if data.billboard then data.billboard.Enabled = dist <= esp.maxDistance end
+                            data.label.Text = string.format("%s [%d]", data.baseName, math.floor(dist))
+                        end
+                    end
+                end
+            end
+            task.wait(0.2)
+        end
+    end)
+end
+
+local function espStop()
+    esp.enabled = false
+    if esp.thread then task.cancel(esp.thread); esp.thread = nil end
+    espClear()
+end
+
+print("[AutoParry] Part 1/3 done")
+
+--[[
+================================================================
+      BetrayalHub - AutoParry + Full Suite (v6) — PART 2/3
+================================================================
+- Auto Generator
+- Firesignal Parry helper
+- Range visual + killer finder
+- Anti-Bait engine
+- Killer hooks
+================================================================
+]]
+print("[AutoParry] Loading Part 2/3...")
+
+-- ============================================================
+-- AUTO GENERATOR (FlowGame auto-solve)
+-- ============================================================
+local autoGen = { enabled = false, nodeDelay = 0.04, lineDelay = 0.6 }
+
+local function flowKey(n) return n.row.."-"..n.col end
+
+local function flowNeighbour(r1,c1,r2,c2)
+    if r2==r1-1 and c2==c1 then return "up" end
+    if r2==r1+1 and c2==c1 then return "down" end
+    if r2==r1 and c2==c1-1 then return "left" end
+    if r2==r1 and c2==c1+1 then return "right" end
+    return false
+end
+
+local function flowOrder(path, endpoints)
+    if not path or #path == 0 then return path end
+    local lookup = {}
+    for _, n in ipairs(path) do lookup[flowKey(n)] = n end
+    local start
+    for _, ep in ipairs(endpoints or {}) do
+        for _, n in ipairs(path) do
+            if n.row == ep.row and n.col == ep.col then start = { row = ep.row, col = ep.col }; break end
+        end
+        if start then break end
+    end
+    if not start then
+        for _, n in ipairs(path) do
+            local nb = 0
+            for _, d in ipairs({{-1,0},{1,0},{0,-1},{0,1}}) do
+                if lookup[(n.row+d[1]).."-"..(n.col+d[2])] then nb += 1 end
+            end
+            if nb == 1 then start = { row = n.row, col = n.col }; break end
+        end
+    end
+    if not start then start = { row = path[1].row, col = path[1].col } end
+    local pool, ordered = {}, {}
+    for _, n in ipairs(path) do pool[flowKey(n)] = { row = n.row, col = n.col } end
+    local cur = start
+    table.insert(ordered, { row = cur.row, col = cur.col }); pool[flowKey(cur)] = nil
+    while next(pool) do
+        local moved = false
+        for k, node in pairs(pool) do
+            if flowNeighbour(cur.row, cur.col, node.row, node.col) then
+                table.insert(ordered, { row = node.row, col = node.col })
+                pool[k] = nil; cur = node; moved = true; break
+            end
+        end
+        if not moved then break end
+    end
+    return ordered
+end
+
+local function flowSolve(puzzle)
+    pcall(function()
+        if not puzzle or not puzzle.Solution then return end
+        local indices = {}
+        for i = 1, #puzzle.Solution do indices[i] = i end
+        for i = #indices, 2, -1 do local j = math.random(1, i); indices[i], indices[j] = indices[j], indices[i] end
+        for _, ci in ipairs(indices) do
+            local solution = puzzle.Solution[ci]; if not solution then continue end
+            local ordered = flowOrder(solution, puzzle.targetPairs[ci])
+            if not ordered or #ordered == 0 then continue end
+            puzzle.paths[ci] = {}
+            for _, node in ipairs(ordered) do
+                table.insert(puzzle.paths[ci], { row = node.row, col = node.col })
+                puzzle:updateGui(); task.wait(autoGen.nodeDelay)
+            end
+            task.wait(autoGen.lineDelay); puzzle:checkForWin()
+        end
+    end)
+end
+
+task.spawn(function()
+    pcall(function()
+        local modFolder  = RS:FindFirstChild("Modules")
+        local miniFolder = modFolder and modFolder:FindFirstChild("Minigames")
+        local fgFolder   = miniFolder and miniFolder:FindFirstChild("FlowGameManager")
+        local fgModule   = fgFolder and fgFolder:FindFirstChild("FlowGame")
+        if fgModule then
+            local ok, FG = pcall(require, fgModule)
+            if ok and FG and FG.new then
+                local orig = FG.new
+                FG.new = function(...)
+                    local p = orig(...)
+                    if autoGen.enabled then task.spawn(function() task.wait(0.3); flowSolve(p) end) end
+                    return p
+                end
+            else warn("[AutoGen] Failed to require FlowGame module") end
+        else warn("[AutoGen] FlowGame not found") end
+    end)
+end)
+
+-- ============================================================
+-- FIRESIGNAL PARRY
+-- ============================================================
+local function getParryButton()
+    local pg = LP:FindFirstChild("PlayerGui"); if not pg then return nil end
+    local main = pg:FindFirstChild("MainUI"); if not main then return nil end
+    local ac = main:FindFirstChild("AbilityContainer"); if not ac then return nil end
+    local p = ac:FindFirstChild("Parry"); if not p then return nil end
+    if p:IsA("GuiButton") then return p end
+    return p:FindFirstChildWhichIsA("GuiButton", true)
+end
+
+local function fireParrySignal()
+    local success = pcall(function()
+        local button = getParryButton()
+        if not button then
+            if CONFIG.debug then warn("[AutoParry] Parry button not found") end
+            return
+        end
+        button.Active = true
+        button.Visible = true
+        pcall(function() button.Interactable = true end)
+        if not firesignal then return end
+        pcall(function() firesignal(button.Activated) end)
+        pcall(function() firesignal(button.MouseButton1Click) end)
+    end)
+    if CONFIG.debug then print("[AutoParry] Fired Parry signals — ok:", success) end
+    return success
+end
+
+-- ============================================================
+-- RANGE CHECK + VISUAL
+-- ============================================================
+local function isInRange(killerHRP, myHRP)
+    if not killerHRP or not myHRP then return false end
+    local toMe = myHRP.Position - killerHRP.Position
+    toMe = Vector3.new(toMe.X, 0, toMe.Z)
+    return toMe.Magnitude <= CONFIG.detectionRange
+end
+
+local function createVisual()
+    local container = Instance.new("Folder"); container.Name = "AutoParryVisual"
+    local disc = Instance.new("Part")
+    disc.Name = "Disc"; disc.Shape = Enum.PartType.Cylinder
+    disc.Size = Vector3.new(0.05, 60, 60); disc.Anchored = true
+    disc.CanCollide = false; disc.CanQuery = false; disc.CanTouch = false
+    disc.Material = Enum.Material.ForceField; disc.Transparency = 0.85
+    disc.Color = CONFIG.colorOut; disc.Parent = container
+
+    local outline = Instance.new("Part")
+    outline.Name = "Outline"; outline.Shape = Enum.PartType.Cylinder
+    outline.Size = Vector3.new(0.02, 60, 60); outline.Anchored = true
+    outline.CanCollide = false; outline.CanQuery = false; outline.CanTouch = false
+    outline.Material = Enum.Material.Neon; outline.Transparency = 0.3
+    outline.Color = CONFIG.colorOut; outline.Parent = container
+
+    container.Parent = WS
+    return { container = container, disc = disc, outline = outline }
+end
+
+local raycastParams = RaycastParams.new()
+raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+raycastParams.IgnoreWater = true
+
+local function getGroundUnderKiller(killer)
+    if not killer or not killer.Parent then return nil end
+    local killerHRP = killer:FindFirstChild("HumanoidRootPart"); if not killerHRP then return nil end
+    raycastParams.FilterDescendantsInstances = { killer, LP.Character }
+    local result = WS:Raycast(killerHRP.Position, Vector3.new(0, -50, 0), raycastParams)
+    if result then return result.Position end
+    return Vector3.new(killerHRP.Position.X, killerHRP.Position.Y - 3, killerHRP.Position.Z)
+end
+
+local function updateVisual(killer, vis)
+    if not killer or not killer.Parent then return end
+    local killerHRP = killer:FindFirstChild("HumanoidRootPart"); if not killerHRP then return end
+    local ch = LP.Character
+    local myHRP = ch and ch:FindFirstChild("HumanoidRootPart")
+    if not myHRP then vis.disc.Transparency = 1; vis.outline.Transparency = 1; return end
+
+    local inRange = isInRange(killerHRP, myHRP)
+    local color = inRange and CONFIG.colorIn or CONFIG.colorOut
+    vis.disc.Color = color; vis.outline.Color = color
+
+    local groundPos = getGroundUnderKiller(killer); if not groundPos then return end
+    local diam = CONFIG.detectionRange * 2
+
+    vis.disc.Size = Vector3.new(0.05, diam, diam)
+    vis.disc.CFrame = CFrame.new(groundPos + Vector3.new(0, 0.05, 0)) * CFrame.Angles(0, 0, math.rad(90))
+    vis.disc.Transparency = inRange and 0.75 or 0.85
+
+    vis.outline.Size = Vector3.new(0.02, diam, diam)
+    vis.outline.CFrame = CFrame.new(groundPos + Vector3.new(0, 0.08, 0)) * CFrame.Angles(0, 0, math.rad(90))
+    vis.outline.Transparency = inRange and 0.3 or 0.5
+end
+
+local function cleanupVisuals()
+    for _, vis in pairs(state.rangeParts) do pcall(function() vis.container:Destroy() end) end
+    state.rangeParts = {}
+end
+
+local function findActiveKillers()
+    local found = {}
+    local paths = { WS:FindFirstChild("Players"), WS:FindFirstChild("Live"), WS:FindFirstChild("Entities"), WS }
+    for _, container in ipairs(paths) do
+        if container then
+            local subKillers = container:FindFirstChild("Killers")
+            local targets = subKillers and subKillers:GetChildren() or container:GetChildren()
+            for _, obj in ipairs(targets) do
+                if obj:IsA("Model") and obj:FindFirstChild("HumanoidRootPart") then
+                    local hum = obj:FindFirstChildOfClass("Humanoid")
+                    if hum and hum.Health > 0 and obj ~= LP.Character then found[obj] = true end
+                end
+            end
+        end
+    end
+    return found
+end
+
+local function startRangeLoop()
+    if state.rangeThread then return end
+    state.rangeThread = task.spawn(function()
+        while CONFIG.showRange do
+            local seen = findActiveKillers()
+            for killer, _ in pairs(seen) do
+                if not state.rangeParts[killer] then state.rangeParts[killer] = createVisual() end
+                updateVisual(killer, state.rangeParts[killer])
+            end
+            for killer, vis in pairs(state.rangeParts) do
+                if not seen[killer] then
+                    pcall(function() vis.container:Destroy() end)
+                    state.rangeParts[killer] = nil
+                end
+            end
+            task.wait(0.03)
+        end
+        state.rangeThread = nil
+    end)
+end
+
+-- ============================================================
+-- ANTI-BAIT
+-- ============================================================
+local antiBaitLines = {}
+local antiBaitThread = nil
+
+local function antiBaitEnsureLine(killer)
+    local khrp = killer:FindFirstChild("HumanoidRootPart")
+    if not khrp then return nil end
+
+    local entry = antiBaitLines[killer]
+    if entry and entry.beam and entry.beam.Parent then
+        if entry.a1 then entry.a1.Position = Vector3.new(0, 0, -CONFIG.antiBaitLength) end
+        return entry
+    end
+
+    local a0 = Instance.new("Attachment")
+    a0.Name = "AntiBait_A0"
+    a0.Position = Vector3.zero
+    a0.Parent = khrp
+
+    local a1 = Instance.new("Attachment")
+    a1.Name = "AntiBait_A1"
+    a1.Position = Vector3.new(0, 0, -CONFIG.antiBaitLength)
+    a1.Parent = khrp
+
+    local beam = Instance.new("Beam")
+    beam.Name = "AntiBait_Beam"
+    beam.Attachment0 = a0
+    beam.Attachment1 = a1
+    beam.Width0 = 0.15
+    beam.Width1 = 0.15
+    beam.FaceCamera = true
+    beam.LightEmission = 1
+    beam.LightInfluence = 0
+    beam.Transparency = NumberSequence.new(0.2)
+    beam.Color = ColorSequence.new(Color3.fromRGB(80, 80, 220))
+    beam.Segments = 1
+    beam.Parent = khrp
+
+    local corridor = Instance.new("Part")
+    corridor.Name = "AntiBait_Corridor"
+    corridor.Size = Vector3.new(CONFIG.antiBaitWidth, 6, CONFIG.antiBaitLength)
+    corridor.Anchored = true
+    corridor.CanCollide = false
+    corridor.CanQuery = false
+    corridor.CanTouch = false
+    corridor.Transparency = 1
+    corridor.Massless = true
+    corridor.Parent = WS
+
+    antiBaitLines[killer] = { beam = beam, a0 = a0, a1 = a1, corridor = corridor }
+    return antiBaitLines[killer]
+end
+
+local function antiBaitRemoveLine(killer)
+    local entry = antiBaitLines[killer]
+    if not entry then return end
+    pcall(function() if entry.beam then entry.beam:Destroy() end end)
+    pcall(function() if entry.a0 then entry.a0:Destroy() end end)
+    pcall(function() if entry.a1 then entry.a1:Destroy() end end)
+    pcall(function() if entry.corridor then entry.corridor:Destroy() end end)
+    antiBaitLines[killer] = nil
+end
+
+local function antiBaitUpdateLines()
+    local active = findActiveKillers()
+    for killer in pairs(antiBaitLines) do
+        if not active[killer] then antiBaitRemoveLine(killer) end
+    end
+    if not CONFIG.antiBaitShowLine then
+        for killer in pairs(antiBaitLines) do antiBaitRemoveLine(killer) end
+        return
+    end
+    for killer in pairs(active) do
+        local entry = antiBaitEnsureLine(killer)
+        if entry then
+            local khrp = killer:FindFirstChild("HumanoidRootPart")
+            if khrp and entry.corridor then
+                if entry.a1 then entry.a1.Position = Vector3.new(0, 0, -CONFIG.antiBaitLength) end
+
+                local cf = CFrame.new(khrp.Position + Vector3.new(0, 1, 0), khrp.Position + Vector3.new(0, 1, 0) + khrp.CFrame.LookVector)
+                entry.corridor.Size = Vector3.new(CONFIG.antiBaitWidth, 6, CONFIG.antiBaitLength)
+                entry.corridor.CFrame = cf * CFrame.new(0, 0, -CONFIG.antiBaitLength / 2)
+
+                local myChar = LP.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    local inside = false
+                    pcall(function()
+                        local rel = entry.corridor.CFrame:PointToObjectSpace(myHRP.Position)
+                        local half = entry.corridor.Size * 0.5
+                        inside = math.abs(rel.X) <= half.X
+                             and math.abs(rel.Y) <= half.Y
+                             and math.abs(rel.Z) <= half.Z
+                    end)
+                    local c = inside and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(80, 80, 220)
+                    entry.beam.Color = ColorSequence.new(c)
+                end
+            end
+        end
+    end
+end
+
+local function antiBaitStartLoop()
+    if antiBaitThread then return end
+    antiBaitThread = task.spawn(function()
+        while state.enabled or CONFIG.antiBaitShowLine do
+            pcall(antiBaitUpdateLines)
+            task.wait(0.05)
+        end
+        antiBaitThread = nil
+    end)
+end
+
+local function antiBaitStopLoop()
+    if antiBaitThread then task.cancel(antiBaitThread); antiBaitThread = nil end
+    for killer in pairs(antiBaitLines) do antiBaitRemoveLine(killer) end
+end
+
+local function isInsideAntiBaitLine(killer, myHRP)
+    if not CONFIG.antiBait then return true end
+    if not killer or not myHRP then return false end
+
+    local khrp = killer:FindFirstChild("HumanoidRootPart")
+    if not khrp then return false end
+
+    local forward = khrp.CFrame.LookVector * Vector3.new(1, 0, 1)
+    if forward.Magnitude < 0.01 then return false end
+    forward = forward.Unit
+
+    local toMe = (myHRP.Position - khrp.Position) * Vector3.new(1, 0, 1)
+    local alongDist = toMe:Dot(forward)
+    local lateral   = (toMe - forward * alongDist).Magnitude
+
+    local halfWidth = CONFIG.antiBaitWidth * 0.5 + CONFIG.antiBaitForgive
+
+    return alongDist >= 0
+       and alongDist <= CONFIG.antiBaitLength
+       and lateral    <= halfWidth
+end
+
+-- ============================================================
+-- KILLER HOOKS
+-- ============================================================
+local function hookKiller(killer)
+    if not killer:IsA("Model") then return end
+    local hum = killer:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then
+        task.spawn(function()
+            local a = hum:WaitForChild("Animator", 5)
+            if a then hookKiller(killer) end
+        end)
+        return
+    end
+    if killer:GetAttribute("AutoParryHooked") then return end
+    killer:SetAttribute("AutoParryHooked", true)
+
+    local conn = animator.AnimationPlayed:Connect(function(track)
+        if not state.enabled then return end
+        if not hum or hum.Health <= 0 then return end
+        local animId = ""
+        pcall(function() if track and track.Animation then animId = tostring(track.Animation.AnimationId or "") end end)
+        if animId == "" then return end
+        local num = animId:match("(%d+)")
+        if not num then return end
+        local killerName = KILLER_M1[num]
+        if not killerName then return end
+        if not killer.Parent then return end
+
+        local ch = LP.Character; if not ch then return end
+        local myHRP = ch:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
+        local killerHRP = killer:FindFirstChild("HumanoidRootPart"); if not killerHRP then return end
+
+        if not isInRange(killerHRP, myHRP) then
+            if CONFIG.debug then
+                print(string.format("[AutoParry] %s animation out of range (%.1f studs)",
+                    killerName, (myHRP.Position - killerHRP.Position).Magnitude))
+            end
+            return
+        end
+
+        if not isInsideAntiBaitLine(killer, myHRP) then
+            if CONFIG.debug then
+                print(string.format("[AutoParry] %s anim BAITED — not in line, skipping", killerName))
+            end
+            return
+        end
+
+        if tick() - state.lastParryTime < CONFIG.parryCooldown then return end
+
+        state.lastParryTime = tick()
+        if CONFIG.debug then
+            print(string.format("[AutoParry] 🔥 %s M1 confirmed (in line) — firing Parry!", killerName))
+        end
+        fireParrySignal()
+    end)
+    table.insert(state.animatorConns, conn)
+end
+
+local function setupKillerWatchers()
+    for _, c in ipairs(state.animatorConns) do pcall(function() c:Disconnect() end) end
+    state.animatorConns = {}
+    for _, c in ipairs(state.killerConns) do pcall(function() c:Disconnect() end) end
+    state.killerConns = {}
+
+    local active = findActiveKillers()
+    local count = 0
+    for killer, _ in pairs(active) do hookKiller(killer); count = count + 1 end
+
+    table.insert(state.killerConns, WS.ChildAdded:Connect(function(c)
+        task.wait(0.3)
+        if c:IsA("Model") and c:FindFirstChild("HumanoidRootPart") then hookKiller(c) end
+    end))
+    print("[AutoParry] Hooked " .. count .. " workspace killers")
+end
+
+print("[AutoParry] Part 2/3 done")
+
+--[[
+================================================================
+      BetrayalHub - AutoParry + Full Suite (v6) — PART 3/3
+================================================================
+- WindUI window
+- All tabs
+- Respawn handler
+- Startup
+================================================================
+]]
+print("[AutoParry] Loading Part 3/3...")
+
+-- ============================================================
+-- WINDUI WINDOW
+-- ============================================================
+local Window = WindUI:CreateWindow({
+    Title = "BetrayalHub - AutoParry",
+    Icon = "sparkles",
+    Author = "Auto Parry",
+    Folder = "betrayalhub_autoparry",
+    Size = UDim2.fromOffset(500, 480),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = false,
+    SideBarWidth = 180,
+    HideSearchBar = true,
+})
+Window:SetToggleKey(Enum.KeyCode.RightShift)
+
+-- ============================================================
+-- MAIN TAB
+-- ============================================================
+local MainTab = Window:Tab({ Title = "Main", Icon = "house" })
+local EnableSec = MainTab:Section({ Title = "Auto Parry", Opened = true })
+
+EnableSec:Toggle({
+    Title = "Enable Auto Parry",
+    Default = false,
+    Callback = function(value)
+        state.enabled = value
+        if value then
+            setupKillerWatchers()
+            antiBaitStartLoop()
+        end
+        print("[AutoParry]", value and "✅ ON" or "❌ OFF")
+    end,
+})
+
+EnableSec:Slider({
+    Title = "Detection Range (studs)",
+    Value = { Min = 0, Max = 100, Default = 30 },
+    Step = 1,
+    Callback = function(v) CONFIG.detectionRange = v end,
+})
+
+EnableSec:Toggle({
+    Title = "Debug Logs",
+    Default = true,
+    Callback = function(v) CONFIG.debug = v end,
+})
+
+-- ============================================================
+-- ANTI-BAIT TAB
+-- ============================================================
+local ABTab = Window:Tab({ Title = "Anti-Bait", Icon = "crosshair" })
+local ABSec = ABTab:Section({ Title = "Anti-Bait", Opened = true })
+
+ABSec:Toggle({
+    Title = "Enable Anti-Bait",
+    Desc = "Parry only fires if you're inside the killer's aim line",
+    Default = true,
+    Callback = function(v)
+        CONFIG.antiBait = v
+        print("[AntiBait]", v and "✅ ON" or "❌ OFF")
+    end,
+})
+
+ABSec:Toggle({
+    Title = "Show Aim Line",
+    Desc = "Draw the beam (blue = out, green = you're in the line)",
+    Default = true,
+    Callback = function(v)
+        CONFIG.antiBaitShowLine = v
+        if v then antiBaitStartLoop() else antiBaitStopLoop() end
+    end,
+})
+
+ABSec:Slider({
+    Title = "Line Length (studs)",
+    Desc = "How far forward the aim line reaches",
+    Value = { Min = 0, Max = 100, Default = 25 },
+    Step = 1,
+    Callback = function(v)
+        CONFIG.antiBaitLength = v
+        for killer, entry in pairs(antiBaitLines) do
+            if entry.a1 then entry.a1.Position = Vector3.new(0, 0, -v) end
+            if entry.corridor then
+                entry.corridor.Size = Vector3.new(CONFIG.antiBaitWidth, 6, v)
+            end
+        end
+    end,
+})
+
+ABSec:Slider({
+    Title = "Line Width (studs)",
+    Desc = "How wide the corridor is (side to side)",
+    Value = { Min = 0, Max = 30, Default = 5 },
+    Step = 0.5,
+    Callback = function(v)
+        CONFIG.antiBaitWidth = v
+        for killer, entry in pairs(antiBaitLines) do
+            if entry.corridor then
+                entry.corridor.Size = Vector3.new(v, 6, CONFIG.antiBaitLength)
+            end
+        end
+    end,
+})
+
+ABSec:Slider({
+    Title = "Bait Forgiveness (studs)",
+    Desc = "Extra padding — higher = more lenient parry",
+    Value = { Min = 0, Max = 20, Default = 2 },
+    Step = 0.5,
+    Callback = function(v) CONFIG.antiBaitForgive = v end,
+})
+
+ABSec:Button({
+    Title = "🔄 Rebuild Lines",
+    Callback = function()
+        antiBaitStopLoop()
+        antiBaitStartLoop()
+        WindUI:Notify({ Title = "Anti-Bait", Content = "Lines rebuilt", Duration = 1, Icon = "check" })
+    end,
+})
+
+-- ============================================================
+-- MOVEMENT TAB
+-- ============================================================
+local MoveTab = Window:Tab({ Title = "Movement", Icon = "wind" })
+local RunSec = MoveTab:Section({ Title = "Run Speed", Opened = true })
+
+RunSec:Toggle({
+    Title = "Enable Run Speed",
+    Default = false,
+    Callback = function(on)
+        runSpeed.enabled = on
+        if on then runSpeed.lastValue = 0; applyRunSpeed(); startRunSpeed() else stopRunSpeed() end
+        print("[RunSpeed]", on and "✅ ON" or "❌ OFF")
+    end,
+})
+
+RunSec:Slider({
+    Title = "Sprint Speed",
+    Value = { Min = 0, Max = 200, Default = 30 },
+    Step = 1,
+    Callback = function(v)
+        runSpeed.speed = v
+        runSpeed.lastValue = 0
+        applyRunSpeed()
+    end,
+})
+
+local StamSec = MoveTab:Section({ Title = "Infinite Stamina", Opened = true })
+
+StamSec:Toggle({
+    Title = "Infinite Stamina",
+    Desc = "Disables all stamina loss (works for Killer or Survivor)",
+    Default = false,
+    Callback = function(on)
+        infStam.enabled = on
+        if on then applyInfStam(); startInfStam() else stopInfStam() end
+        print("[InfiniteStamina]", on and "✅ ON" or "❌ OFF")
+    end,
+})
+
+-- ============================================================
+-- ESP TAB
+-- ============================================================
+local EspTab = Window:Tab({ Title = "ESP", Icon = "eye" })
+local EspSec = EspTab:Section({ Title = "ESP", Opened = true })
+
+EspSec:Toggle({
+    Title = "Enable ESP",
+    Default = false,
+    Callback = function(on)
+        if on then espStart() else espStop() end
+        print("[ESP]", on and "✅ ON" or "❌ OFF")
+    end,
+})
+
+EspSec:Toggle({
+    Title = "Show Killers",
+    Default = true,
+    Callback = function(v) esp.showKillers = v; espRefreshAll() end,
+})
+
+EspSec:Toggle({
+    Title = "Show Survivors",
+    Default = true,
+    Callback = function(v) esp.showSurvivors = v; espRefreshAll() end,
+})
+
+EspSec:Toggle({
+    Title = "Show Generators",
+    Default = true,
+    Callback = function(v) esp.showGenerators = v; espRefreshAll() end,
+})
+
+EspSec:Slider({
+    Title = "Max Distance",
+    Value = { Min = 0, Max = 1000, Default = 300 },
+    Step = 10,
+    Callback = function(v) esp.maxDistance = v; espRefreshAll() end,
+})
+
+EspSec:Slider({
+    Title = "Highlight Opacity",
+    Desc = "0 = solid, 1 = invisible",
+    Value = { Min = 0, Max = 1, Default = 0.5 },
+    Step = 0.05,
+    Callback = function(v) esp.transparency = v; espRefreshAll() end,
+})
+
+-- ============================================================
+-- GENERATOR TAB
+-- ============================================================
+local GenTab = Window:Tab({ Title = "Generator", Icon = "circuit-board" })
+local GenSec = GenTab:Section({ Title = "Auto Generator", Opened = true })
+
+GenSec:Toggle({
+    Title = "Auto Solve Generators",
+    Desc = "Automatically solves the flow puzzle when it opens",
+    Default = false,
+    Callback = function(on)
+        autoGen.enabled = on
+        print("[AutoGen]", on and "✅ ON" or "❌ OFF")
+    end,
+})
+
+GenSec:Slider({
+    Title = "Node Delay (s)",
+    Value = { Min = 0, Max = 0.5, Default = 0.04 },
+    Step = 0.01,
+    Callback = function(v) autoGen.nodeDelay = v end,
+})
+
+GenSec:Slider({
+    Title = "Line Pause (s)",
+    Value = { Min = 0, Max = 2.0, Default = 0.6 },
+    Step = 0.1,
+    Callback = function(v) autoGen.lineDelay = v end,
+})
+
+-- ============================================================
+-- VISUALS TAB
+-- ============================================================
+local VisualsTab = Window:Tab({ Title = "Visuals", Icon = "scan" })
+local VisualsSec = VisualsTab:Section({ Title = "Range Indicator", Opened = true })
+
+VisualsSec:Toggle({
+    Title = "Show Range Indicator",
+    Default = true,
+    Callback = function(v)
+        CONFIG.showRange = v
+        if v then startRangeLoop() else cleanupVisuals() end
+    end,
+})
+
+-- ============================================================
+-- CONFIG TAB
+-- ============================================================
+local ConfigTab = Window:Tab({ Title = "Config", Icon = "settings" })
+local ConfigSec = ConfigTab:Section({ Title = "Library", Opened = true })
+
+ConfigSec:Button({
+    Title = "🔄 Reload Watchers",
+    Callback = function()
+        if state.enabled then
+            setupKillerWatchers()
+            WindUI:Notify({ Title = "AutoParry", Content = "Watchers Reloaded", Duration = 2, Icon = "check" })
+        end
+    end,
+})
+
+ConfigSec:Button({
+    Title = "🔥 Force Test Parry",
+    Callback = function()
+        fireParrySignal()
+        WindUI:Notify({ Title = "AutoParry", Content = "Parry signal fired", Duration = 2, Icon = "zap" })
+    end,
+})
+
+ConfigSec:Button({
+    Title = "Unload Script",
+    Callback = function()
+        state.enabled = false
+        CONFIG.showRange = false
+        stopRunSpeed()
+        stopInfStam()
+        espStop()
+        antiBaitStopLoop()
+        cleanupVisuals()
+        for _, c in ipairs(state.animatorConns) do pcall(function() c:Disconnect() end) end
+        for _, c in ipairs(state.killerConns) do pcall(function() c:Disconnect() end) end
+        state.animatorConns = {}
+        state.killerConns = {}
+        Window:Destroy()
+        print("[AutoParry] Unloaded")
+    end,
+})
+
+-- ============================================================
+-- RESPAWN
+-- ============================================================
+LP.CharacterAdded:Connect(function()
+    task.wait(1)
+    if state.enabled then setupKillerWatchers() end
+    if runSpeed.enabled then runSpeed.lastValue = 0; applyRunSpeed(); if not runSpeed.thread then startRunSpeed() end end
+    if infStam.enabled then applyInfStam(); if not infStam.thread then startInfStam() end end
+end)
+
+-- ============================================================
+-- STARTUP
+-- ============================================================
+startRangeLoop()
+setupKillerWatchers()
+antiBaitStartLoop()
+
+print("[AutoParry] ✅ Loaded successfully!")
+print("[AutoParry] Toggle UI: RightShift")
